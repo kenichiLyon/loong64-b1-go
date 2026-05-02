@@ -165,17 +165,20 @@
 
 交付：
 
-- 上传接口、大小/类型/数量限制、hash 计算和对象存储落盘。
-- Word/PDF/报告/截图/代码包/Git 链接元信息解析。
+- `submissions`、`artifacts`、`extracted_contents` 数据表和解析 Job 队列挂接。
+- 学生创建提交、上传文件、登记 Git 链接；教师查看提交列表和详情。
+- 上传接口、大小/类型/数量限制、SHA-256 计算和对象存储落盘。
+- Word/PDF/报告/截图/代码包/Git 链接元信息解析；深度解析后续进入 worker。
 - 解析任务状态流：queued、running、succeeded、failed。
 - 压缩包安全检查：Zip Slip、路径穿越、符号链接、超大解压。
 - 学生提交页面和教师提交详情页。
 
 验收：
 
-- 样例 Word、PDF、截图和代码包可上传并生成解析摘要。
+- 样例 PDF、文本报告、截图和代码包可上传并生成解析摘要或元数据。
 - 非法类型、超大文件和恶意压缩包被拒绝并记录原因。
 - 解析失败不会阻塞教师人工查看原始文件。
+- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
 
 ### 阶段 4：规则核查与 LLM 初评
 

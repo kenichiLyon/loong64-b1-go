@@ -22,7 +22,7 @@
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
 
-阶段 2 教学域未新增第三方运行时依赖；数据库、API、权重校验和权限校验继续基于 Go 标准库与既有 `pgx/v5`。
+阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。深度 Word/PDF/OCR 解析继续列为 LoongArch 高风险能力，后续必须逐项验证。
 
 ## 必跑检查
 
@@ -44,6 +44,8 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 | --- | --- | --- | --- |
 | Go API 服务 | 纯 Go 标准库优先 | 低 | 禁用 CGO，目标机 smoke test |
 | PostgreSQL | 系统包或官方包 | 中 | 记录安装来源，提供备份恢复脚本 |
+| 成果上传落盘 | 本地 ObjectStore | 低 | 限制大小/数量，保留 SHA-256 和审计 |
+| ZIP/代码包检查 | Go 标准库 `archive/zip` | 低 | 拒绝路径穿越、符号链接和超大解压 |
 | Word/PDF 解析 | 纯 Go 优先，可替换外部工具 | 高 | 解析失败时保留原文查看和人工复核 |
 | 截图 OCR | 可选能力 | 高 | OCR 不可用时只保存图片和人工查看 |
 | Excel 导出 | 纯 Go XLSX 库 | 中 | 导出 CSV 或简化 XLSX |

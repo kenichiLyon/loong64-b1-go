@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.3.0
+  version: 0.4.0
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -287,6 +287,135 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Experiment'
+  /api/v1/student/experiments/{experimentId}/submissions:
+    post:
+      summary: 学生创建实训提交
+      operationId: createStudentSubmission
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSubmissionRequest'
+      responses:
+        '201':
+          description: 提交记录已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Submission'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/student/submissions/{submissionId}/artifacts:
+    post:
+      summary: 学生上传成果附件
+      operationId: uploadStudentSubmissionArtifact
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                artifact_kind:
+                  $ref: '#/components/schemas/ArtifactKind'
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: 附件已保存并创建解析任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactWithExtraction'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/student/submissions/{submissionId}/artifact-links:
+    post:
+      summary: 学生登记 Git 链接成果
+      operationId: createStudentSubmissionArtifactLink
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGitLinkRequest'
+      responses:
+        '201':
+          description: Git 链接已登记
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtifactWithExtraction'
+  /api/v1/student/submissions/{submissionId}:
+    get:
+      summary: 学生查看自己的提交详情
+      operationId: getStudentSubmission
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 提交详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/experiments/{experimentId}/submissions:
+    get:
+      summary: 教师查看实训提交列表
+      operationId: listTeacherExperimentSubmissions
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 提交列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Submission'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}:
+    get:
+      summary: 教师查看提交详情
+      operationId: getTeacherSubmission
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 提交详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionDetail'
+        '403':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     UserId:
@@ -315,6 +444,12 @@ components:
         type: string
     ExperimentId:
       name: experimentId
+      in: path
+      required: true
+      schema:
+        type: string
+    SubmissionId:
+      name: submissionId
       in: path
       required: true
       schema:
@@ -673,3 +808,122 @@ components:
         due_at:
           type: string
           format: date-time
+    CreateSubmissionRequest:
+      type: object
+      properties:
+        note:
+          type: string
+    Submission:
+      type: object
+      required: [id, experiment_id, student_id, status, attempt_no, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        experiment_id:
+          type: string
+        student_id:
+          type: string
+        status:
+          type: string
+          enum: [draft, submitted, parsing, parsed, failed, archived]
+        attempt_no:
+          type: integer
+        submitted_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ArtifactKind:
+      type: string
+      enum: [document, report, screenshot, code_archive, git_link, other]
+    Artifact:
+      type: object
+      required: [id, submission_id, kind, original_name, byte_size, status, metadata, created_by, created_at]
+      properties:
+        id:
+          type: string
+        submission_id:
+          type: string
+        kind:
+          $ref: '#/components/schemas/ArtifactKind'
+        original_name:
+          type: string
+        content_type:
+          type: string
+        byte_size:
+          type: integer
+          format: int64
+        sha256_hex:
+          type: string
+        storage_key:
+          type: string
+        source_url:
+          type: string
+        status:
+          type: string
+          enum: [stored, queued, parsing, parsed, failed, rejected]
+        metadata:
+          type: object
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    ExtractedContent:
+      type: object
+      required: [id, artifact_id, status, metadata, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        artifact_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        text_excerpt:
+          type: string
+        metadata:
+          type: object
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ArtifactWithExtraction:
+      type: object
+      required: [artifact, extraction]
+      properties:
+        artifact:
+          $ref: '#/components/schemas/Artifact'
+        extraction:
+          $ref: '#/components/schemas/ExtractedContent'
+        job_id:
+          type: string
+    SubmissionDetail:
+      type: object
+      required: [submission, artifacts]
+      properties:
+        submission:
+          $ref: '#/components/schemas/Submission'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactWithExtraction'
+    CreateGitLinkRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+        commit_sha:
+          type: string
+        note:
+          type: string

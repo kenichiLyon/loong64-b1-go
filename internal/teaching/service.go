@@ -146,14 +146,52 @@ type Repository interface {
 	CreateExperiment(context.Context, Experiment, AuditEntry) (Experiment, error)
 	ExperimentCourseID(context.Context, string) (string, error)
 	PublishExperiment(context.Context, string, AuditEntry) (Experiment, error)
+	ExperimentSubmissionAccess(context.Context, string, string) (ExperimentSubmissionAccess, error)
+	CreateSubmission(context.Context, Submission, AuditEntry) (Submission, error)
+	StudentOwnsSubmission(context.Context, string, string) (bool, error)
+	SubmissionCourseID(context.Context, string) (string, error)
+	SubmissionArtifactCount(context.Context, string) (int, error)
+	CreateArtifact(context.Context, Artifact, ExtractedContent, *QueuedJob, AuditEntry) (ArtifactWithExtraction, error)
+	ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error)
+	GetSubmissionDetail(context.Context, string) (SubmissionDetail, error)
 }
 
 type Service struct {
-	repo Repository
+	repo                      Repository
+	store                     ArtifactStore
+	maxUploadBytes            int64
+	maxArtifactsPerSubmission int
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+type ArtifactStore interface {
+	Resolve(key string) (string, error)
+}
+
+type ServiceOption func(*Service)
+
+func WithArtifactStore(store ArtifactStore) ServiceOption {
+	return func(s *Service) {
+		s.store = store
+	}
+}
+
+func WithUploadLimits(maxUploadBytes int64, maxArtifactsPerSubmission int) ServiceOption {
+	return func(s *Service) {
+		if maxUploadBytes > 0 {
+			s.maxUploadBytes = maxUploadBytes
+		}
+		if maxArtifactsPerSubmission > 0 {
+			s.maxArtifactsPerSubmission = maxArtifactsPerSubmission
+		}
+	}
+}
+
+func NewService(repo Repository, options ...ServiceOption) *Service {
+	service := &Service{repo: repo, maxUploadBytes: DefaultMaxUploadBytes, maxArtifactsPerSubmission: DefaultMaxArtifactsPerSubmission}
+	for _, option := range options {
+		option(service)
+	}
+	return service
 }
 
 type CreateUserInput struct {

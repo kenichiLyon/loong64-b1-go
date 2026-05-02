@@ -41,10 +41,16 @@ func NewHandler(deps Dependencies) http.Handler {
 	var teachingService *teaching.Service
 	if deps.DB != nil && deps.DB.Raw() != nil {
 		repo := teaching.NewPostgresRepository(deps.DB)
-		teachingService = teaching.NewService(repo)
+		teachingService = teaching.NewService(repo,
+			teaching.WithArtifactStore(deps.Store),
+			teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
+		)
 	}
 	if teachingService == nil {
-		teachingService = teaching.NewService(nil)
+		teachingService = teaching.NewService(nil,
+			teaching.WithArtifactStore(deps.Store),
+			teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
+		)
 	}
 	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
 		Service:       teachingService,
