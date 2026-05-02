@@ -24,7 +24,7 @@
 - `cmd/migrate`：PostgreSQL 迁移命令。
 - `internal/storage`：本地 ObjectStore 初始化和健康检查。
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
-- `.github/workflows`：Auto Build 与 CD 发布流水线。
+- `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：初始 API 说明。
@@ -93,9 +93,10 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 ## CI/CD
 
 - Auto Build：每次 push、PR 或手动触发时运行格式检查、测试、linux/amd64 和 linux/loong64 构建，并上传构建产物。
+- Code Quality Review：每次 push、PR 或手动触发时运行 `golangci-lint`；PR 中配置 `SOURCERY_TOKEN` 后自动运行 SourceryAI 代码审核。
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 
-详见 `docs/CD_PIPELINE.md`。
+详见 `docs/CD_PIPELINE.md` 和 `docs/CODE_REVIEW_CI.md`。
 
 ## 部署与本地数据库
 
@@ -105,7 +106,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 ## 目录规划
 
 ```text
-.github/workflows/     Auto Build 与 CD 发布流水线
+.github/workflows/     Auto Build、代码审核与 CD 发布流水线
 cmd/                   Go 程序入口
 internal/              后端内部模块
 api/                   OpenAPI 和接口契约
