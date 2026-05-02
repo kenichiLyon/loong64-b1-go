@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.4.0
+  version: 0.5.0
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -415,6 +415,44 @@ paths:
               schema:
                 $ref: '#/components/schemas/SubmissionDetail'
         '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}/evaluations/initial:
+    post:
+      summary: 教师触发规则核查与可选 LLM 初评
+      operationId: createTeacherSubmissionInitialEvaluation
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateInitialEvaluationRequest'
+      responses:
+        '201':
+          description: 初评结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}/evaluations/latest:
+    get:
+      summary: 教师查看最新规则核查与初评结果
+      operationId: getTeacherSubmissionLatestEvaluation
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 最新初评结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResultDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
 components:
   parameters:
@@ -916,6 +954,124 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ArtifactWithExtraction'
+    CreateInitialEvaluationRequest:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum: [rule_only, rule_and_llm]
+          default: rule_only
+        force:
+          type: boolean
+          default: false
+    EvaluationResult:
+      type: object
+      required: [id, submission_id, experiment_id, rubric_version_id, status, rule_status, llm_status, prompt_version, evidence_snapshot, rule_summary, needs_teacher_review, created_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        submission_id:
+          type: string
+        experiment_id:
+          type: string
+        rubric_version_id:
+          type: string
+        status:
+          type: string
+          enum: [completed, needs_review, failed]
+        rule_status:
+          type: string
+          enum: [succeeded, failed, skipped]
+        llm_status:
+          type: string
+          enum: [succeeded, failed, skipped, not_configured]
+        prompt_version:
+          type: string
+        evidence_snapshot:
+          type: object
+          description: 脱敏证据快照，不包含原始文件内容或密钥。
+        rule_summary:
+          type: object
+        llm_summary:
+          type: string
+        needs_teacher_review:
+          type: boolean
+        error:
+          type: string
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    RuleCheckFinding:
+      type: object
+      required: [id, evaluation_result_id, category, severity, message, created_at]
+      properties:
+        id:
+          type: string
+        evaluation_result_id:
+          type: string
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [info, low, medium, high, critical]
+        message:
+          type: string
+        evidence_ref:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    MetricScore:
+      type: object
+      required: [id, evaluation_result_id, metric_id, metric_code, source, suggested_score, max_score, confidence_bps, rationale, evidence_refs, created_at]
+      properties:
+        id:
+          type: string
+        evaluation_result_id:
+          type: string
+        metric_id:
+          type: string
+        metric_code:
+          type: string
+        source:
+          type: string
+          enum: [rule, llm]
+        suggested_score:
+          type: integer
+        max_score:
+          type: integer
+        confidence_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+        rationale:
+          type: string
+        evidence_refs:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+    EvaluationResultDetail:
+      type: object
+      required: [result, findings, scores]
+      properties:
+        result:
+          $ref: '#/components/schemas/EvaluationResult'
+        findings:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleCheckFinding'
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricScore'
     CreateGitLinkRequest:
       type: object
       required: [url]

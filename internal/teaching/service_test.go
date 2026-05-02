@@ -281,6 +281,9 @@ type fakeRepo struct {
 	submissionAccess          ExperimentSubmissionAccess
 	ownsSubmission            bool
 	artifactCount             int
+	evaluationContext         EvaluationContext
+	latestEvaluation          EvaluationResultDetail
+	createdEvaluation         EvaluationResultDetail
 }
 
 func (f *fakeRepo) CreateUser(context.Context, User, []Role, AuditEntry) (User, error) {
@@ -367,4 +370,14 @@ func (f *fakeRepo) ListSubmissionsForExperiment(context.Context, string, int) ([
 }
 func (f *fakeRepo) GetSubmissionDetail(context.Context, string) (SubmissionDetail, error) {
 	return SubmissionDetail{}, nil
+}
+func (f *fakeRepo) GetEvaluationContext(context.Context, string) (EvaluationContext, error) {
+	return f.evaluationContext, nil
+}
+func (f *fakeRepo) CreateInitialEvaluation(_ context.Context, result EvaluationResult, findings []RuleCheckFinding, scores []MetricScore, _ *LLMCallLog, _ AuditEntry) (EvaluationResultDetail, error) {
+	f.createdEvaluation = EvaluationResultDetail{Result: result, Findings: findings, Scores: scores}
+	return f.createdEvaluation, nil
+}
+func (f *fakeRepo) GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error) {
+	return f.latestEvaluation, nil
 }

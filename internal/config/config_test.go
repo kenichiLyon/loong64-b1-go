@@ -13,6 +13,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 	t.Setenv("MAX_UPLOAD_BYTES", "")
 	t.Setenv("MAX_ARTIFACTS_PER_SUBMISSION", "")
 	t.Setenv("READY_TIMEOUT", "")
+	t.Setenv("LLM_TIMEOUT", "")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "127.0.0.1:8080" {
@@ -36,6 +37,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.ReadyTimeout != 2*time.Second {
 		t.Fatalf("unexpected ReadyTimeout: %s", cfg.ReadyTimeout)
 	}
+	if cfg.LLMTimeout != 30*time.Second {
+		t.Fatalf("unexpected LLMTimeout: %s", cfg.LLMTimeout)
+	}
 }
 
 func TestLoadParsesOverrides(t *testing.T) {
@@ -45,6 +49,10 @@ func TestLoadParsesOverrides(t *testing.T) {
 	t.Setenv("MAX_UPLOAD_BYTES", "1024")
 	t.Setenv("MAX_ARTIFACTS_PER_SUBMISSION", "3")
 	t.Setenv("READY_TIMEOUT", "1500ms")
+	t.Setenv("LLM_BASE_URL", "https://llm.example/v1")
+	t.Setenv("LLM_MODEL", "qwen")
+	t.Setenv("LLM_API_KEY", "test-key")
+	t.Setenv("LLM_TIMEOUT", "45s")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "0.0.0.0:9000" {
@@ -64,6 +72,12 @@ func TestLoadParsesOverrides(t *testing.T) {
 	}
 	if cfg.ReadyTimeout != 1500*time.Millisecond {
 		t.Fatalf("unexpected ReadyTimeout: %s", cfg.ReadyTimeout)
+	}
+	if cfg.LLMBaseURL != "https://llm.example/v1" || cfg.LLMModel != "qwen" || cfg.LLMAPIKey != "test-key" {
+		t.Fatalf("unexpected LLM settings: %+v", cfg)
+	}
+	if cfg.LLMTimeout != 45*time.Second {
+		t.Fatalf("unexpected LLMTimeout: %s", cfg.LLMTimeout)
 	}
 }
 

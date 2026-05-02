@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
 
 type User struct {
@@ -154,6 +156,9 @@ type Repository interface {
 	CreateArtifact(context.Context, Artifact, ExtractedContent, *QueuedJob, AuditEntry) (ArtifactWithExtraction, error)
 	ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error)
 	GetSubmissionDetail(context.Context, string) (SubmissionDetail, error)
+	GetEvaluationContext(context.Context, string) (EvaluationContext, error)
+	CreateInitialEvaluation(context.Context, EvaluationResult, []RuleCheckFinding, []MetricScore, *LLMCallLog, AuditEntry) (EvaluationResultDetail, error)
+	GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error)
 }
 
 type Service struct {
@@ -161,10 +166,15 @@ type Service struct {
 	store                     ArtifactStore
 	maxUploadBytes            int64
 	maxArtifactsPerSubmission int
+	llmClient                 LLMCompleter
 }
 
 type ArtifactStore interface {
 	Resolve(key string) (string, error)
+}
+
+type LLMCompleter interface {
+	CompleteJSON(context.Context, llm.CompletionRequest) (llm.CompletionResponse, error)
 }
 
 type ServiceOption func(*Service)
@@ -183,6 +193,12 @@ func WithUploadLimits(maxUploadBytes int64, maxArtifactsPerSubmission int) Servi
 		if maxArtifactsPerSubmission > 0 {
 			s.maxArtifactsPerSubmission = maxArtifactsPerSubmission
 		}
+	}
+}
+
+func WithLLMClient(client LLMCompleter) ServiceOption {
+	return func(s *Service) {
+		s.llmClient = client
 	}
 }
 
