@@ -1,79 +1,68 @@
 package main
 
 import (
-	"encoding/json"
+	"context"
 	"log/slog"
 	"net/http"
 	"os"
-	"runtime"
+	"os/signal"
+	"syscall"
 	"time"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/api"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
+	"github.com/kenichiLyon/loong64-b1-go/internal/database"
+	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
 )
-
-const serviceName = "loong64-b1-go"
 
 func main() {
 	cfg := config.Load()
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", rootHandler)
-	mux.HandleFunc("/health", healthHandler(cfg))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	store := storage.NewLocal(cfg.StorageRoot)
+	if err := store.Ensure(ctx); err != nil {
+		logger.Error("storage initialization failed", "error", err)
+		os.Exit(1)
+	}
+
+	var db *database.Pool
+	if cfg.DatabaseURL != "" {
+		connectCtx, cancel := context.WithTimeout(ctx, cfg.ReadyTimeout)
+		var err error
+		db, err = database.Open(connectCtx, cfg)
+		cancel()
+		if err != nil {
+			logger.Error("database initialization failed", "error", err)
+			os.Exit(1)
+		}
+		defer db.Close()
+	} else {
+		logger.Warn("DATABASE_URL is not configured; readiness check will report postgres as failed")
+	}
 
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           requestLogMiddleware(mux),
-		ReadHeaderTimeout: 5 * time.Second,
+		Handler:           api.NewHandler(api.Dependencies{Config: cfg, Logger: logger, DB: db, Store: store}),
+		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 
-	slog.Info("starting server", "service", serviceName, "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Error("server shutdown failed", "error", err)
+		}
+	}()
+
+	logger.Info("starting server", "service", api.ServiceName, "addr", cfg.HTTPAddr, "env", cfg.AppEnv)
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		slog.Error("server stopped unexpectedly", "error", err)
+		logger.Error("server stopped unexpectedly", "error", err)
 		os.Exit(1)
 	}
-}
-
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{
-		"service": serviceName,
-		"message": "software training evaluation and report system",
-		"health":  "/health",
-	})
-}
-
-func healthHandler(cfg config.Config) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"status":       "ok",
-			"service":      serviceName,
-			"environment":  cfg.AppEnv,
-			"storage_root": cfg.StorageRoot,
-			"goos":         runtime.GOOS,
-			"goarch":       runtime.GOARCH,
-			"time":         time.Now().UTC().Format(time.RFC3339),
-		})
-	}
-}
-
-func requestLogMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		started := time.Now()
-		next.ServeHTTP(w, r)
-		slog.Info("request completed", "method", r.Method, "path", r.URL.Path, "duration", time.Since(started))
-	})
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(payload); err != nil {
-		slog.Error("failed to encode response", "error", err)
-	}
+	logger.Info("server stopped", "time", time.Now().UTC().Format(time.RFC3339))
 }
