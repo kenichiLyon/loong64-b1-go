@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Go
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.txt
+coverage.out
+
+# Runtime data
+/storage/
+/data/
+/tmp/
+/uploads/
+/reports/
+
+# Frontend
+/node_modules/
+/web/node_modules/
+/web/dist/
+/web/.vite/
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

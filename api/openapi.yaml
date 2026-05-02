@@ -1,0 +1,46 @@
+openapi: 3.1.0
+info:
+  title: loong64-b1-go API
+  version: 0.1.0
+  description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
+servers:
+  - url: http://127.0.0.1:8080
+paths:
+  /health:
+    get:
+      summary: 服务健康检查
+      operationId: getHealth
+      responses:
+        '200':
+          description: 服务可用
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                  - service
+                  - goos
+                  - goarch
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  service:
+                    type: string
+                    example: loong64-b1-go
+                  environment:
+                    type: string
+                    example: development
+                  storage_root:
+                    type: string
+                    example: ./storage
+                  goos:
+                    type: string
+                    example: linux
+                  goarch:
+                    type: string
+                    example: loong64
+                  time:
+                    type: string
+                    format: date-time
