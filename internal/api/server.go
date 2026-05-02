@@ -12,6 +12,7 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/health"
 	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
 	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
+	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
 )
 
 const ServiceName = "loong64-b1-go"
@@ -37,6 +38,20 @@ func NewHandler(deps Dependencies) http.Handler {
 	mux.HandleFunc("/health", liveHandler(checks))
 	mux.HandleFunc("/health/live", liveHandler(checks))
 	mux.HandleFunc("/health/ready", readyHandler(checks, deps.Config.ReadyTimeout))
+	var teachingService *teaching.Service
+	if deps.DB != nil && deps.DB.Raw() != nil {
+		repo := teaching.NewPostgresRepository(deps.DB)
+		teachingService = teaching.NewService(repo)
+	}
+	if teachingService == nil {
+		teachingService = teaching.NewService(nil)
+	}
+	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
+		Service:       teachingService,
+		AppEnv:        deps.Config.AppEnv,
+		Logger:        logger,
+		DevAuthBypass: deps.Config.DevAuthBypass,
+	})
 	return httpx.Chain(mux, httpx.Recover(logger), httpx.RequestID, httpx.AccessLog(logger))
 }
 
