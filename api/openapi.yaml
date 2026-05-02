@@ -1,46 +1,90 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.1.0
+  version: 0.2.0
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
 paths:
   /health:
     get:
-      summary: 服务健康检查
+      summary: 存活检查兼容入口
       operationId: getHealth
       responses:
         '200':
-          description: 服务可用
+          description: 服务进程存活
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - status
-                  - service
-                  - goos
-                  - goarch
-                properties:
-                  status:
-                    type: string
-                    example: ok
-                  service:
-                    type: string
-                    example: loong64-b1-go
-                  environment:
-                    type: string
-                    example: development
-                  storage_root:
-                    type: string
-                    example: ./storage
-                  goos:
-                    type: string
-                    example: linux
-                  goarch:
-                    type: string
-                    example: loong64
-                  time:
-                    type: string
-                    format: date-time
+                $ref: '#/components/schemas/HealthSnapshot'
+  /health/live:
+    get:
+      summary: 存活检查
+      operationId: getLiveHealth
+      responses:
+        '200':
+          description: 服务进程存活
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthSnapshot'
+  /health/ready:
+    get:
+      summary: 就绪检查
+      operationId: getReadyHealth
+      responses:
+        '200':
+          description: 数据库和对象存储均可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthSnapshot'
+        '503':
+          description: 至少一个依赖不可用
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthSnapshot'
+components:
+  schemas:
+    HealthSnapshot:
+      type: object
+      required:
+        - status
+        - service
+        - goos
+        - goarch
+        - time
+      properties:
+        status:
+          type: string
+          enum: [ok, fail]
+        service:
+          type: string
+          example: loong64-b1-go
+        goos:
+          type: string
+          example: linux
+        goarch:
+          type: string
+          example: loong64
+        time:
+          type: string
+          format: date-time
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, status, duration]
+            properties:
+              name:
+                type: string
+                example: postgres
+              status:
+                type: string
+                enum: [ok, fail]
+              error:
+                type: string
+              duration:
+                type: string
+                example: 2ms

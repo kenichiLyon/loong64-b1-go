@@ -111,11 +111,13 @@
 - 本地 ObjectStore 抽象和存储目录初始化。
 - Job 状态模型和基础任务执行器。
 - OpenAPI 初始规范和 API 冒烟测试。
+- Auto Build 流水线生成 linux/amd64 与 linux/loong64 构建产物，CD 流水线发布 Auto Build 产物到 GitHub Release。
 
 验收：
 
 - 健康检查区分 `live`、`ready`，ready 覆盖数据库和存储。
 - 空数据库可一键迁移到最新 schema。
+- Auto Build 成功上传 artifact，CD 只发布 Auto Build 产物且不重新编译。
 - Windows/Linux amd64 本地可运行，LoongArch 交叉编译通过。
 
 ### 阶段 2：用户、课程与评价模板

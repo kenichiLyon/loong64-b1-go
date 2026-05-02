@@ -15,20 +15,28 @@
 - 最终验收必须在 LoongArch 真机或等价环境运行 smoke test。
 - 文档解析、OCR、PDF 和本地模型服务是高风险项，必须逐项验证并保留降级入口。
 
+## 当前依赖评估
+
+| 依赖 | 用途 | CGO | LoongArch 风险 | 处理 |
+| --- | --- | --- | --- | --- |
+| Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
+| `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
+
 ## 必跑检查
 
 ```bash
 go test ./...
 GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/server; Remove-Item Env:GOOS,Env:GOARCH,Env:CGO_ENABLED
+$env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/server; go build ./cmd/migrate; Remove-Item Env:GOOS,Env:GOARCH,Env:CGO_ENABLED
 ```
 
-## 依赖评估表
+## 能力评估表
 
 | 能力 | 默认方案 | LoongArch 风险 | 降级策略 |
 | --- | --- | --- | --- |
