@@ -44,14 +44,20 @@ X-Actor-ID: teacher-1
 X-Actor-Roles: teacher
 ```
 
-非 `production` 环境未传入时，会使用内置开发操作者：
+如确需本机快速冒烟，可显式设置：
+
+```text
+DEV_AUTH_BYPASS=true
+```
+
+此开关只在非 `production` 环境且请求来自 loopback 地址时生效。启用后，未传入请求头时会使用内置开发操作者并写入警告日志：
 
 ```text
 X-Actor-ID: dev-admin
 X-Actor-Roles: admin,teacher,student
 ```
 
-生产环境必须显式传入操作者头；后续阶段将替换为正式认证和会话。
+生产环境必须显式传入操作者头；`DEV_AUTH_BYPASS` 必须保持 `false`。后续阶段将替换为正式认证和会话。
 
 ## 4. API 边界
 

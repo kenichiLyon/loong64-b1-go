@@ -15,6 +15,7 @@ type Config struct {
 	LLMBaseURL        string
 	LLMModel          string
 	MigrationsDir     string
+	DevAuthBypass     bool
 	DBMaxConns        int32
 	ReadHeaderTimeout time.Duration
 	ShutdownTimeout   time.Duration
@@ -31,11 +32,24 @@ func Load() Config {
 		LLMBaseURL:        getenv("LLM_BASE_URL", ""),
 		LLMModel:          getenv("LLM_MODEL", ""),
 		MigrationsDir:     getenv("MIGRATIONS_DIR", "migrations"),
+		DevAuthBypass:     boolFromEnv("DEV_AUTH_BYPASS", false),
 		DBMaxConns:        int32FromEnv("DB_MAX_CONNS", 10),
 		ReadHeaderTimeout: durationFromEnv("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 		ShutdownTimeout:   durationFromEnv("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		ReadyTimeout:      durationFromEnv("READY_TIMEOUT", 2*time.Second),
 	}
+}
+
+func boolFromEnv(key string, fallback bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	parsed, err := strconv.ParseBool(value)
+	if err != nil {
+		return fallback
+	}
+	return parsed
 }
 
 func getenv(key, fallback string) string {

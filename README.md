@@ -65,6 +65,7 @@ $env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmod
 ```bash
 HTTP_ADDR=127.0.0.1:8080
 APP_ENV=development
+DEV_AUTH_BYPASS=false
 HTTP_READ_HEADER_TIMEOUT=5s
 HTTP_SHUTDOWN_TIMEOUT=10s
 READY_TIMEOUT=2s

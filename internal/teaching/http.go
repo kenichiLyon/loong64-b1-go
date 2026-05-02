@@ -3,7 +3,9 @@ package teaching
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -12,19 +14,21 @@ import (
 )
 
 type HTTPDependencies struct {
-	Service *Service
-	AppEnv  string
-	Logger  *slog.Logger
+	Service       *Service
+	AppEnv        string
+	Logger        *slog.Logger
+	DevAuthBypass bool
 }
 
 type HTTPHandler struct {
-	service *Service
-	appEnv  string
-	logger  *slog.Logger
+	service       *Service
+	appEnv        string
+	logger        *slog.Logger
+	devAuthBypass bool
 }
 
 func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
-	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger}
+	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger, devAuthBypass: deps.DevAuthBypass}
 	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("GET /api/v1/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/v1/admin/users", h.createUser)
@@ -276,9 +280,12 @@ func (h *HTTPHandler) publishExperiment(w http.ResponseWriter, r *http.Request) 
 func (h *HTTPHandler) currentActor(r *http.Request) (Actor, error) {
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
 	roleHeader := strings.TrimSpace(r.Header.Get("X-Actor-Roles"))
-	if actorID == "" && h.appEnv != "production" {
+	if actorID == "" && roleHeader == "" && h.devAuthBypass && h.appEnv != "production" && isLocalRequest(r) {
 		actorID = "dev-admin"
 		roleHeader = "admin,teacher,student"
+		if h.logger != nil {
+			h.logger.Warn("using development auth bypass", "remote_addr", r.RemoteAddr)
+		}
 	}
 	if actorID == "" {
 		return Actor{}, unauthorizedError("X-Actor-ID is required")
@@ -296,10 +303,26 @@ func (h *HTTPHandler) decode(w http.ResponseWriter, r *http.Request, dst any) bo
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
+		if h.logger != nil {
+			h.logger.Warn("failed to decode JSON request body", "error", err)
+		}
+		if errors.Is(err, io.EOF) {
+			h.writeError(w, validationError("request body is required"))
+			return false
+		}
 		h.writeError(w, validationError("invalid JSON request body"))
 		return false
 	}
 	return true
+}
+
+func isLocalRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (h *HTTPHandler) audit(r *http.Request) AuditEntry {

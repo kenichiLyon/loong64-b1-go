@@ -9,6 +9,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "")
 	t.Setenv("APP_ENV", "")
 	t.Setenv("DB_MAX_CONNS", "")
+	t.Setenv("DEV_AUTH_BYPASS", "")
 	t.Setenv("READY_TIMEOUT", "")
 
 	cfg := Load()
@@ -21,6 +22,9 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.DBMaxConns != 10 {
 		t.Fatalf("unexpected DBMaxConns: %d", cfg.DBMaxConns)
 	}
+	if cfg.DevAuthBypass {
+		t.Fatal("DevAuthBypass should be disabled by default")
+	}
 	if cfg.ReadyTimeout != 2*time.Second {
 		t.Fatalf("unexpected ReadyTimeout: %s", cfg.ReadyTimeout)
 	}
@@ -29,6 +33,7 @@ func TestLoadUsesDefaults(t *testing.T) {
 func TestLoadParsesOverrides(t *testing.T) {
 	t.Setenv("HTTP_ADDR", "0.0.0.0:9000")
 	t.Setenv("DB_MAX_CONNS", "17")
+	t.Setenv("DEV_AUTH_BYPASS", "true")
 	t.Setenv("READY_TIMEOUT", "1500ms")
 
 	cfg := Load()
@@ -37,6 +42,9 @@ func TestLoadParsesOverrides(t *testing.T) {
 	}
 	if cfg.DBMaxConns != 17 {
 		t.Fatalf("unexpected DBMaxConns: %d", cfg.DBMaxConns)
+	}
+	if !cfg.DevAuthBypass {
+		t.Fatal("DevAuthBypass should parse true override")
 	}
 	if cfg.ReadyTimeout != 1500*time.Millisecond {
 		t.Fatalf("unexpected ReadyTimeout: %s", cfg.ReadyTimeout)

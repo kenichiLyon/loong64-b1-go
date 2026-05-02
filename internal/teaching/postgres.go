@@ -604,7 +604,13 @@ func mapDBError(err error) error {
 		case "23503":
 			return validationError("referenced resource does not exist")
 		case "23514":
-			return validationError("database constraint failed")
+			msg := "database constraint failed"
+			if pgErr.ConstraintName != "" {
+				msg = fmt.Sprintf("database constraint %s failed", pgErr.ConstraintName)
+			} else if pgErr.Detail != "" {
+				msg = pgErr.Detail
+			}
+			return validationError(msg)
 		case "45000", "P0001":
 			return conflictError(pgErr.Message)
 		}

@@ -47,9 +47,10 @@ func NewHandler(deps Dependencies) http.Handler {
 		teachingService = teaching.NewService(nil)
 	}
 	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
-		Service: teachingService,
-		AppEnv:  deps.Config.AppEnv,
-		Logger:  logger,
+		Service:       teachingService,
+		AppEnv:        deps.Config.AppEnv,
+		Logger:        logger,
+		DevAuthBypass: deps.Config.DevAuthBypass,
 	})
 	return httpx.Chain(mux, httpx.Recover(logger), httpx.RequestID, httpx.AccessLog(logger))
 }
