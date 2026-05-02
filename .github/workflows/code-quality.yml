@@ -1,0 +1,69 @@
+name: Code Quality Review
+
+on:
+  push:
+    branches:
+      - main
+      - 'feature/**'
+      - 'fix/**'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  go-lint:
+    name: Go linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          check-latest: true
+          cache: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.11.4
+          args: --timeout=5m
+
+  sourceryai:
+    name: SourceryAI PR review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    env:
+      SOURCERY_TOKEN: ${{ secrets.SOURCERY_TOKEN }}
+    steps:
+      - name: Skip SourceryAI without token
+        if: env.SOURCERY_TOKEN == ''
+        run: echo "SOURCERY_TOKEN is not configured; skipping SourceryAI review."
+
+      - name: Checkout
+        if: env.SOURCERY_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        if: env.SOURCERY_TOKEN != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: SourceryAI review
+        if: env.SOURCERY_TOKEN != ''
+        uses: sourcery-ai/action@v1
+        with:
+          token: ${{ secrets.SOURCERY_TOKEN }}
+          diff_ref: ${{ github.event.pull_request.base.sha }}
+          target: .
+          check: false

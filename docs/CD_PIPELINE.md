@@ -1,6 +1,24 @@
 # CD 发布流水线
 
-本项目使用 GitHub Actions 管理自动构建和发布。流水线必须只发布由 Auto Build 产生的构建产物，不在 CD 阶段重新编译，确保发布内容可追溯。
+本项目使用 GitHub Actions 管理自动代码审核、自动构建和发布。流水线必须只发布由 Auto Build 产生的构建产物，不在 CD 阶段重新编译，确保发布内容可追溯。
+
+## Code Quality Review
+
+文件：`.github/workflows/code-quality.yml`
+
+触发：
+
+- push 到 `main`、`feature/**` 或 `fix/**`
+- pull request 到 `main`
+- 手动 `workflow_dispatch`
+
+步骤：
+
+1. 使用 `golangci-lint` 执行 Go 静态检查，读取 `.golangci.yml`。
+2. PR 场景下，如果仓库配置了 `SOURCERY_TOKEN`，运行 SourceryAI 差异代码审核。
+3. 未配置 `SOURCERY_TOKEN` 时只跳过 SourceryAI，不影响 Go linter。
+
+详见 `docs/CODE_REVIEW_CI.md`。
 
 ## Auto Build
 
@@ -41,12 +59,14 @@
 
 ## 权限
 
+- Code Quality Review：`contents: read`、`pull-requests: read`。
 - Auto Build：`contents: read`。
 - CD Publish Artifacts：`contents: write`、`actions: read`。
 
 ## 约束
 
 - CD 不重新编译，只发布 Auto Build 的产物。
+- SourceryAI 需要仓库级 Secret `SOURCERY_TOKEN`；不得把 token 写入仓库。
 - Release tag 与 Auto Build commit 绑定。
 - 如果同名 Release 已存在，流水线跳过发布，避免覆盖历史产物。
 - 发布物不得包含 `.env`、密钥、真实学生数据或本地 storage 目录。
