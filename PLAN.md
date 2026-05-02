@@ -120,6 +120,24 @@
 - Auto Build 成功上传 artifact，CD 只发布 Auto Build 产物且不重新编译。
 - Windows/Linux amd64 本地可运行，LoongArch 交叉编译通过。
 
+### 阶段 1.5：部署骨架与本地数据库调试
+
+目标：补齐银河麒麟 systemd 非容器部署骨架和开发环境 PostgreSQL 初始化脚本，降低后续阶段联调成本。
+
+交付：
+
+- `deploy/kylin/systemd` 提供 API 服务和迁移服务的 systemd 单元。
+- `deploy/kylin/env` 提供生产环境变量模板，不包含真实密钥。
+- `deploy/kylin/scripts` 提供安装单元和健康检查脚本。
+- `scripts/dev` 提供 Windows PowerShell 与 Linux shell 的本地 PostgreSQL 初始化和启动脚本。
+- `docs/DEPLOY_KYLIN.md` 与 `docs/LOCAL_POSTGRES.md` 记录部署与本地联调步骤。
+
+验收：
+
+- 本地脚本通过语法级检查，不提交真实密码或密钥。
+- systemd 单元包含专用用户、最小写目录、环境文件和 restart 策略。
+- 文档覆盖 release 产物、迁移、服务启动、健康检查和目标机验证记录。
+
 ### 阶段 2：用户、课程与评价模板
 
 目标：完成教学管理和评分规则基础闭环。

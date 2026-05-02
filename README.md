@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 1：后端基础设施。
+阶段 1.5：后端基础设施 + 部署骨架。
 
 已包含：
 
@@ -25,8 +25,10 @@
 - `internal/storage`：本地 ObjectStore 初始化和健康检查。
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
 - `.github/workflows`：Auto Build 与 CD 发布流水线。
+- `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
+- `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：初始 API 说明。
-- `docs/`：安全基线、LoongArch 兼容性记录和 CD 流水线说明。
+- `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 
 ## 快速启动
 
@@ -94,6 +96,11 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 
 详见 `docs/CD_PIPELINE.md`。
+
+## 部署与本地数据库
+
+- 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
+- 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`
 
 ## 目录规划
 
