@@ -14,15 +14,19 @@
 
 ## 当前状态
 
-阶段 0：仓库治理与最小 Go 服务骨架。
+阶段 1：后端基础设施。
 
 已包含：
 
 - `AGENT.md`：固定开发流程和 GitHub MCP 远端提交流程。
 - `PLAN.md`：完整开发计划、阶段验收和 LoongArch 检查清单。
-- `cmd/server`：最小健康检查服务。
+- `cmd/server`：Go HTTP 服务、请求日志、请求 ID、panic recovery、live/ready 健康检查。
+- `cmd/migrate`：PostgreSQL 迁移命令。
+- `internal/storage`：本地 ObjectStore 初始化和健康检查。
+- `internal/jobs`：基础 Job 状态模型和内存执行器。
+- `.github/workflows`：Auto Build 与 CD 发布流水线。
 - `api/openapi.yaml`：初始 API 说明。
-- `docs/`：安全基线和 LoongArch 兼容性记录。
+- `docs/`：安全基线、LoongArch 兼容性记录和 CD 流水线说明。
 
 ## 快速启动
 
@@ -35,16 +39,36 @@ go run ./cmd/server
 健康检查：
 
 ```bash
-curl http://127.0.0.1:8080/health
+curl http://127.0.0.1:8080/health/live
+curl http://127.0.0.1:8080/health/ready
 ```
 
-可选环境变量：
+`/health/ready` 会检查 PostgreSQL 和本地对象存储；未设置 `DATABASE_URL` 时会返回 503，这是预期行为。
+
+## 数据库迁移
+
+```bash
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/migrate up
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable'; go run ./cmd/migrate up
+```
+
+## 可选环境变量
 
 ```bash
 HTTP_ADDR=127.0.0.1:8080
 APP_ENV=development
+HTTP_READ_HEADER_TIMEOUT=5s
+HTTP_SHUTDOWN_TIMEOUT=10s
+READY_TIMEOUT=2s
 STORAGE_ROOT=./storage
+MIGRATIONS_DIR=migrations
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable
+DB_MAX_CONNS=10
 LLM_BASE_URL=http://127.0.0.1:8000/v1
 LLM_MODEL=local-model
 ```
@@ -55,26 +79,34 @@ LLM_MODEL=local-model
 gofmt -w cmd internal
 go test ./...
 GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 ```
 
 Windows PowerShell 交叉编译示例：
 
 ```powershell
-$env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/server; Remove-Item Env:GOOS,Env:GOARCH,Env:CGO_ENABLED
+$env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/server; go build ./cmd/migrate; Remove-Item Env:GOOS,Env:GOARCH,Env:CGO_ENABLED
 ```
+
+## CI/CD
+
+- Auto Build：每次 push、PR 或手动触发时运行格式检查、测试、linux/amd64 和 linux/loong64 构建，并上传构建产物。
+- CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
+
+详见 `docs/CD_PIPELINE.md`。
 
 ## 目录规划
 
 ```text
-cmd/                  Go 程序入口
-internal/             后端内部模块
-api/                  OpenAPI 和接口契约
-migrations/           PostgreSQL 迁移脚本
-web/                  PC Web 前端
-frontend/             如后续改名，需同步 PLAN.md
-deploy/kylin/         银河麒麟部署脚本和 systemd 文件
-docs/                 架构、安全、兼容性和用户文档
-testdata/             脱敏或合成测试样例
+.github/workflows/     Auto Build 与 CD 发布流水线
+cmd/                   Go 程序入口
+internal/              后端内部模块
+api/                   OpenAPI 和接口契约
+migrations/            PostgreSQL 迁移脚本
+web/                   PC Web 前端
+deploy/kylin/          银河麒麟部署脚本和 systemd 文件
+docs/                  架构、安全、兼容性和用户文档
+testdata/              脱敏或合成测试样例
 ```
 
 ## 版本控制纪律
