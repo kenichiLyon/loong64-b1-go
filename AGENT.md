@@ -34,15 +34,16 @@
 - 禁止只本地修改、只本地 commit、或绕过 MCP 直接把最终变更推到远端。
 - 禁止 force push、删除远端分支、改写历史、`git reset --hard`、覆盖未读取的远端文件。
 - 每个逻辑工作单元至少形成一个远端 commit；不要把无关功能混入同一提交。
+- 每次仓库变更提交都必须走 Pull Request 流程，等待 CI/CD、linter 和 SourceryAI review，并在 PR 中与 SourceryAI 的审查意见互动；若确认评论无实质性问题，可回复说明理由以说服 SourceryAI 后合并。
 - GitHub MCP、网络或权限异常导致无法提交时，必须停止后续开发并报告阻塞原因。
 - 每次最终回复必须列出：仓库、分支、commit SHA、变更文件、验证命令和验证结果。
 
 ### 分支策略
 
 - `main`：稳定主分支，保存可运行的阶段性成果。
-- 阶段 0 的治理初始化允许直接提交到 `main`。
-- 阶段 1 起默认从 `main` 创建 `feature/<scope>` 或 `fix/<scope>` 分支。
-- 高风险变更、多人协作或跨模块变更必须创建 PR；小型文档修正可直接提交到 `main`。
+- 阶段 0 的治理初始化历史例外已结束；后续不得直接提交到 `main`。
+- 所有阶段默认从 `main` 创建 `feature/<scope>`、`fix/<scope>` 或 `docs/<scope>` 分支。
+- 所有变更必须创建 PR；小型文档修正也不得直接提交到 `main`。
 
 ### Commit Message 规范
 
@@ -65,8 +66,10 @@
 4. 执行最小验证：`gofmt`、`go test ./...`、必要 API/前端/导出检查。
 5. 对 Go 后端变更执行 LoongArch 门槛检查：`GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server`。
 6. 提交前扫描敏感信息，不得提交密钥、Token、真实学生数据、生产文件或模型 API Key。
-7. 通过 GitHub MCP 把本轮文件作为远端 commit 提交。
-8. 确认远端提交成功，记录 commit SHA 和验证结果。
+7. 通过 GitHub MCP 把本轮文件作为远端 commit 提交到工作分支。
+8. 通过 GitHub MCP 创建 PR，并等待 CI/CD、linter、SourceryAI review 和必要人工检查完成。
+9. 对 SourceryAI 评论逐条处理：有实质问题则修复并追加 commit；无实质问题则在 PR 中回复说明设计理由、风险评估和验证结果。
+10. 所有阻塞检查通过且 SourceryAI 互动完成后，方可合并 PR。
 
 ## 5. 技术约束
 
@@ -111,7 +114,8 @@
 
 每个工作单元完成时必须满足：
 
-- 变更已通过 GitHub MCP 提交到 `kenichiLyon/loong64-b1-go`。
+- 变更已通过 GitHub MCP 提交到 `kenichiLyon/loong64-b1-go` 的工作分支，并通过 PR 流程合并。
+- PR 已等待 CI/CD、linter 和 SourceryAI review；所有 SourceryAI 实质问题已修复，非实质问题已在 PR 中说明理由。
 - 最终回复包含 commit SHA、文件清单、验证结果和未完成风险。
 - 没有新增密钥、隐私数据或未评估的高风险依赖。
 - `PLAN.md` 与实际范围保持一致；范围变化时必须同步更新。
