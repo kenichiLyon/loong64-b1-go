@@ -1,0 +1,90 @@
+name: CD Publish Artifacts
+
+on:
+  workflow_run:
+    workflows:
+      - Auto Build
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Auto Build workflow run id to publish
+        required: true
+        type: string
+      tag:
+        description: Optional release tag override
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    name: Publish Auto Build artifact release
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Resolve source build
+        id: source
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            run_id="${{ github.event.workflow_run.id }}"
+            head_sha="${{ github.event.workflow_run.head_sha }}"
+          else
+            run_id="${{ inputs.run_id }}"
+            head_sha="$(gh run view "$run_id" --json headSha --jq .headSha)"
+          fi
+          short_sha="${head_sha:0:12}"
+          tag="auto-build-${short_sha}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$short_sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Download Auto Build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ steps.source.outputs.run_id }}
+          pattern: auto-build-*
+          merge-multiple: true
+          path: release-dist
+
+      - name: Prepare release notes
+        run: |
+          cat > release-notes.md <<EOF
+          Auto Build artifact release
+
+          - Source commit: ${{ steps.source.outputs.head_sha }}
+          - Source workflow run: ${{ steps.source.outputs.run_id }}
+          - Target platform: linux/amd64 and linux/loong64
+          - Deployment target: LoongArch + 银河麒麟高级服务器版
+
+          This CD job publishes artifacts produced by Auto Build without rebuilding them.
+          EOF
+          find release-dist -maxdepth 1 -type f -print | sort
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.source.outputs.tag }}
+          HEAD_SHA: ${{ steps.source.outputs.head_sha }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; skipping publish."
+            exit 0
+          fi
+          gh release create "$TAG" release-dist/* \
+            --target "$HEAD_SHA" \
+            --title "Auto Build $TAG" \
+            --notes-file release-notes.md
