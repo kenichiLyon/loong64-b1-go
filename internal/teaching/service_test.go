@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestValidateMetricsStrictAndNormalized(t *testing.T) {
@@ -163,6 +164,23 @@ func TestCreateSubmissionRequiresEnrollmentAndPublishedExperiment(t *testing.T) 
 	if ErrorKindOf(err) != KindValidation {
 		t.Fatalf("unpublished experiment should fail validation, got %v", err)
 	}
+
+	pastDue := time.Now().Add(-1 * time.Hour)
+	service = NewService(&fakeRepo{submissionAccess: ExperimentSubmissionAccess{Status: "published", Enrolled: true, DueAt: &pastDue}})
+	_, err = service.CreateSubmission(context.Background(), actor, "experiment-1", CreateSubmissionInput{}, AuditEntry{})
+	if ErrorKindOf(err) != KindValidation {
+		t.Fatalf("past due experiment should fail validation, got %v", err)
+	}
+
+	futureDue := time.Now().Add(time.Hour)
+	service = NewService(&fakeRepo{submissionAccess: ExperimentSubmissionAccess{Status: "published", Enrolled: true, DueAt: &futureDue}})
+	submission, err := service.CreateSubmission(context.Background(), actor, "experiment-1", CreateSubmissionInput{}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("published experiment should allow enrolled student submission: %v", err)
+	}
+	if submission.ExperimentID != "experiment-1" || submission.StudentID != "student-1" || submission.Status != "draft" || submission.AttemptNo != 1 {
+		t.Fatalf("unexpected submission: %+v", submission)
+	}
 }
 
 func TestCreateGitLinkArtifactRequiresOwnedSubmission(t *testing.T) {
@@ -174,6 +192,72 @@ func TestCreateGitLinkArtifactRequiresOwnedSubmission(t *testing.T) {
 	_, err = service.CreateGitLinkArtifact(context.Background(), actor, "submission-1", CreateGitLinkInput{URL: "https://example.edu/repo.git"}, AuditEntry{})
 	if ErrorKindOf(err) != KindForbidden {
 		t.Fatalf("student should not attach artifacts to another submission, got %v", err)
+	}
+}
+
+func TestCreateGitLinkArtifactSuccess(t *testing.T) {
+	actor, err := NewActor("student-1", []Role{RoleStudent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{ownsSubmission: true}, WithUploadLimits(DefaultMaxUploadBytes, 3))
+	result, err := service.CreateGitLinkArtifact(context.Background(), actor, "submission-1", CreateGitLinkInput{
+		URL:       "https://example.edu/repo.git",
+		CommitSHA: "0123456789abcdef0123456789abcdef01234567",
+	}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("CreateGitLinkArtifact should succeed: %v", err)
+	}
+	if result.Artifact.Kind != ArtifactKindGitLink || result.Artifact.Status != "stored" {
+		t.Fatalf("unexpected artifact: %+v", result.Artifact)
+	}
+	if result.Extraction.Status != "succeeded" || result.Extraction.TextExcerpt == "" {
+		t.Fatalf("unexpected extraction: %+v", result.Extraction)
+	}
+	var metadata map[string]string
+	if err := json.Unmarshal(result.Artifact.Metadata, &metadata); err != nil {
+		t.Fatalf("metadata should be JSON object: %v", err)
+	}
+	if metadata["url_host"] != "example.edu" || metadata["commit_sha"] != "0123456789abcdef0123456789abcdef01234567" {
+		t.Fatalf("unexpected git metadata: %+v", metadata)
+	}
+}
+
+func TestCreateGitLinkArtifactValidationErrors(t *testing.T) {
+	actor, err := NewActor("student-1", []Role{RoleStudent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{ownsSubmission: true})
+	tests := []struct {
+		name  string
+		input CreateGitLinkInput
+	}{
+		{name: "relative", input: CreateGitLinkInput{URL: "repo.git"}},
+		{name: "scheme", input: CreateGitLinkInput{URL: "ftp://example.edu/repo.git"}},
+		{name: "host", input: CreateGitLinkInput{URL: "https:///repo.git"}},
+		{name: "short sha", input: CreateGitLinkInput{URL: "https://example.edu/repo.git", CommitSHA: "abc123"}},
+		{name: "non hex sha", input: CreateGitLinkInput{URL: "https://example.edu/repo.git", CommitSHA: "zzzzzzzz"}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := service.CreateGitLinkArtifact(context.Background(), actor, "submission-1", tc.input, AuditEntry{})
+			if ErrorKindOf(err) != KindValidation {
+				t.Fatalf("expected validation error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestCreateGitLinkArtifactRespectsArtifactLimit(t *testing.T) {
+	actor, err := NewActor("student-1", []Role{RoleStudent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{ownsSubmission: true, artifactCount: 3}, WithUploadLimits(DefaultMaxUploadBytes, 3))
+	_, err = service.CreateGitLinkArtifact(context.Background(), actor, "submission-1", CreateGitLinkInput{URL: "https://example.edu/repo.git"}, AuditEntry{})
+	if ErrorKindOf(err) != KindValidation {
+		t.Fatalf("expected validation when artifact limit is reached, got %v", err)
 	}
 }
 

@@ -66,3 +66,30 @@ func TestLoadParsesOverrides(t *testing.T) {
 		t.Fatalf("unexpected ReadyTimeout: %s", cfg.ReadyTimeout)
 	}
 }
+
+func TestLoadFallsBackForInvalidUploadLimitOverrides(t *testing.T) {
+	tests := []struct {
+		name      string
+		maxBytes  string
+		maxCount  string
+		wantBytes int64
+		wantCount int
+	}{
+		{name: "non numeric", maxBytes: "large", maxCount: "many", wantBytes: 50 * 1024 * 1024, wantCount: 20},
+		{name: "negative", maxBytes: "-1", maxCount: "-1", wantBytes: 50 * 1024 * 1024, wantCount: 20},
+		{name: "zero", maxBytes: "0", maxCount: "0", wantBytes: 50 * 1024 * 1024, wantCount: 20},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MAX_UPLOAD_BYTES", tc.maxBytes)
+			t.Setenv("MAX_ARTIFACTS_PER_SUBMISSION", tc.maxCount)
+			cfg := Load()
+			if cfg.MaxUploadBytes != tc.wantBytes {
+				t.Fatalf("unexpected MaxUploadBytes: %d", cfg.MaxUploadBytes)
+			}
+			if cfg.MaxArtifactsPerSubmission != tc.wantCount {
+				t.Fatalf("unexpected MaxArtifactsPerSubmission: %d", cfg.MaxArtifactsPerSubmission)
+			}
+		})
+	}
+}
