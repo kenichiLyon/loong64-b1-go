@@ -15,7 +15,7 @@
 步骤：
 
 1. 检出代码。
-2. 使用 Go `1.24.x` 工具链。
+2. 使用 GitHub Actions 当前稳定 Go 工具链。
 3. 检查 `gofmt`。
 4. 运行 `go test ./...`。
 5. 构建 `linux/amd64` 和 `linux/loong64` 服务端二进制。
