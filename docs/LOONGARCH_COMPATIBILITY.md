@@ -22,6 +22,8 @@
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
 
+阶段 2 教学域未新增第三方运行时依赖；数据库、API、权重校验和权限校验继续基于 Go 标准库与既有 `pgx/v5`。
+
 ## 必跑检查
 
 ```bash

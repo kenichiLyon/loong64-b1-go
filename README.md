@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 1.5：后端基础设施 + 部署骨架。
+阶段 2：教学域后端闭环（用户、课程、评价模板、实训任务）。
 
 已包含：
 
@@ -24,6 +24,7 @@
 - `cmd/migrate`：PostgreSQL 迁移命令。
 - `internal/storage`：本地 ObjectStore 初始化和健康检查。
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
+- `internal/teaching`：用户、课程、班级、选课、评价模板版本和实训任务服务。
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
@@ -97,6 +98,19 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 
 详见 `docs/CD_PIPELINE.md` 和 `docs/CODE_REVIEW_CI.md`。
+
+## 教学域 API
+
+阶段 2 提供 `/api/v1` 教学域接口，覆盖管理员维护用户/班级/课程/选课、教师维护评价模板和实训任务。
+
+开发环境临时使用请求头标识操作者：
+
+```bash
+X-Actor-ID: teacher-1
+X-Actor-Roles: teacher
+```
+
+详见 `docs/TEACHING_DOMAIN.md` 和 `api/openapi.yaml`。
 
 ## 部署与本地数据库
 

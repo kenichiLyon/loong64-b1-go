@@ -1,0 +1,334 @@
+package teaching
+
+import (
+	"encoding/json"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
+)
+
+type HTTPDependencies struct {
+	Service *Service
+	AppEnv  string
+	Logger  *slog.Logger
+}
+
+type HTTPHandler struct {
+	service *Service
+	appEnv  string
+	logger  *slog.Logger
+}
+
+func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
+	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger}
+	mux.HandleFunc("GET /api/v1/me", h.me)
+	mux.HandleFunc("GET /api/v1/admin/users", h.listUsers)
+	mux.HandleFunc("POST /api/v1/admin/users", h.createUser)
+	mux.HandleFunc("PUT /api/v1/admin/users/{userID}/roles", h.setUserRoles)
+	mux.HandleFunc("POST /api/v1/admin/classes", h.createClass)
+	mux.HandleFunc("POST /api/v1/admin/courses", h.createCourse)
+	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/classes", h.addCourseClass)
+	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/teachers", h.assignTeacher)
+	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/enrollments", h.enrollStudent)
+	mux.HandleFunc("POST /api/v1/teacher/rubric-templates", h.createRubricTemplate)
+	mux.HandleFunc("POST /api/v1/teacher/rubric-templates/{templateID}/versions", h.createRubricVersion)
+	mux.HandleFunc("POST /api/v1/teacher/rubric-template-versions/{versionID}/publish", h.publishRubricVersion)
+	mux.HandleFunc("POST /api/v1/teacher/courses/{courseID}/experiments", h.createExperiment)
+	mux.HandleFunc("POST /api/v1/teacher/experiments/{experimentID}/publish", h.publishExperiment)
+}
+
+func (h *HTTPHandler) me(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"id": actor.ID, "roles": actor.RoleValues()})
+}
+
+func (h *HTTPHandler) listUsers(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	users, err := h.service.ListUsers(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
+}
+
+func (h *HTTPHandler) createUser(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateUserInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	user, err := h.service.CreateUser(r.Context(), actor, input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, user)
+}
+
+func (h *HTTPHandler) setUserRoles(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input struct {
+		Roles []string `json:"roles"`
+	}
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.SetUserRoles(r.Context(), actor, r.PathValue("userID"), input.Roles, h.audit(r)); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) createClass(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateClassInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	class, err := h.service.CreateClass(r.Context(), actor, input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, class)
+}
+
+func (h *HTTPHandler) createCourse(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateCourseInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	course, err := h.service.CreateCourse(r.Context(), actor, input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, course)
+}
+
+func (h *HTTPHandler) addCourseClass(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input struct {
+		ClassID string `json:"class_id"`
+	}
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.AddCourseClass(r.Context(), actor, r.PathValue("courseID"), input.ClassID, h.audit(r)); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) assignTeacher(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input AssignTeacherInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.AssignTeacher(r.Context(), actor, r.PathValue("courseID"), input, h.audit(r)); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) enrollStudent(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input EnrollStudentInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.EnrollStudent(r.Context(), actor, r.PathValue("courseID"), input, h.audit(r)); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) createRubricTemplate(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateRubricTemplateInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	template, err := h.service.CreateRubricTemplate(r.Context(), actor, input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, template)
+}
+
+func (h *HTTPHandler) createRubricVersion(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateRubricVersionInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	version, err := h.service.CreateRubricVersion(r.Context(), actor, r.PathValue("templateID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, version)
+}
+
+func (h *HTTPHandler) publishRubricVersion(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	version, err := h.service.PublishRubricVersion(r.Context(), actor, r.PathValue("versionID"), h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, version)
+}
+
+func (h *HTTPHandler) createExperiment(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateExperimentInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	experiment, err := h.service.CreateExperiment(r.Context(), actor, r.PathValue("courseID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, experiment)
+}
+
+func (h *HTTPHandler) publishExperiment(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	experiment, err := h.service.PublishExperiment(r.Context(), actor, r.PathValue("experimentID"), h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, experiment)
+}
+
+func (h *HTTPHandler) currentActor(r *http.Request) (Actor, error) {
+	actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
+	roleHeader := strings.TrimSpace(r.Header.Get("X-Actor-Roles"))
+	if actorID == "" && h.appEnv != "production" {
+		actorID = "dev-admin"
+		roleHeader = "admin,teacher,student"
+	}
+	if actorID == "" {
+		return Actor{}, unauthorizedError("X-Actor-ID is required")
+	}
+	parts := strings.FieldsFunc(roleHeader, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
+	roles, err := ParseRoleList(parts)
+	if err != nil {
+		return Actor{}, err
+	}
+	return NewActor(actorID, roles)
+}
+
+func (h *HTTPHandler) decode(w http.ResponseWriter, r *http.Request, dst any) bool {
+	defer func() { _ = r.Body.Close() }()
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(dst); err != nil {
+		h.writeError(w, validationError("invalid JSON request body"))
+		return false
+	}
+	return true
+}
+
+func (h *HTTPHandler) audit(r *http.Request) AuditEntry {
+	return AuditEntry{RequestID: r.Header.Get("X-Request-ID")}
+}
+
+func (h *HTTPHandler) writeError(w http.ResponseWriter, err error) {
+	status := http.StatusInternalServerError
+	switch ErrorKindOf(err) {
+	case KindValidation:
+		status = http.StatusBadRequest
+	case KindUnauthorized:
+		status = http.StatusUnauthorized
+	case KindForbidden:
+		status = http.StatusForbidden
+	case KindNotFound:
+		status = http.StatusNotFound
+	case KindConflict:
+		status = http.StatusConflict
+	case KindUnavailable:
+		status = http.StatusServiceUnavailable
+	}
+	message := err.Error()
+	var appErr *Error
+	if errors.As(err, &appErr) {
+		message = appErr.Message
+	}
+	if h.logger != nil && status >= http.StatusInternalServerError {
+		h.logger.Error("teaching api failed", "error", err)
+	}
+	httpx.WriteError(w, status, ErrorCodeOf(err), message)
+}
