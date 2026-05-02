@@ -43,6 +43,12 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("POST /api/v1/teacher/rubric-template-versions/{versionID}/publish", h.publishRubricVersion)
 	mux.HandleFunc("POST /api/v1/teacher/courses/{courseID}/experiments", h.createExperiment)
 	mux.HandleFunc("POST /api/v1/teacher/experiments/{experimentID}/publish", h.publishExperiment)
+	mux.HandleFunc("POST /api/v1/student/experiments/{experimentID}/submissions", h.createSubmission)
+	mux.HandleFunc("POST /api/v1/student/submissions/{submissionID}/artifacts", h.uploadArtifact)
+	mux.HandleFunc("POST /api/v1/student/submissions/{submissionID}/artifact-links", h.createGitLinkArtifact)
+	mux.HandleFunc("GET /api/v1/student/submissions/{submissionID}", h.getSubmissionDetail)
+	mux.HandleFunc("GET /api/v1/teacher/experiments/{experimentID}/submissions", h.listExperimentSubmissions)
+	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}", h.getSubmissionDetail)
 }
 
 func (h *HTTPHandler) me(w http.ResponseWriter, r *http.Request) {
@@ -275,6 +281,103 @@ func (h *HTTPHandler) publishExperiment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, experiment)
+}
+
+func (h *HTTPHandler) createSubmission(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateSubmissionInput
+	if r.Body != nil && r.ContentLength != 0 {
+		if !h.decode(w, r, &input) {
+			return
+		}
+	}
+	submission, err := h.service.CreateSubmission(r.Context(), actor, r.PathValue("experimentID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, submission)
+}
+
+func (h *HTTPHandler) uploadArtifact(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, h.service.maxUploadBytes+1024*1024)
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			h.writeError(w, validationError("file exceeds max upload size"))
+			return
+		}
+		h.writeError(w, validationError("multipart field file is required"))
+		return
+	}
+	defer func() { _ = file.Close() }()
+	artifact, err := h.service.UploadArtifact(r.Context(), actor, r.PathValue("submissionID"), ArtifactUploadInput{
+		FileName:     header.Filename,
+		ContentType:  header.Header.Get("Content-Type"),
+		DeclaredKind: parseArtifactKindField(r.FormValue("artifact_kind")),
+		Reader:       file,
+	}, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, artifact)
+}
+
+func (h *HTTPHandler) createGitLinkArtifact(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateGitLinkInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	artifact, err := h.service.CreateGitLinkArtifact(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusCreated, artifact)
+}
+
+func (h *HTTPHandler) listExperimentSubmissions(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	submissions, err := h.service.ListSubmissionsForExperiment(r.Context(), actor, r.PathValue("experimentID"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": submissions})
+}
+
+func (h *HTTPHandler) getSubmissionDetail(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	detail, err := h.service.GetSubmissionDetail(r.Context(), actor, r.PathValue("submissionID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, detail)
 }
 
 func (h *HTTPHandler) currentActor(r *http.Request) (Actor, error) {

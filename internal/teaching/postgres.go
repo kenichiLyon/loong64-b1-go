@@ -516,6 +516,215 @@ RETURNING id, course_id, title, COALESCE(description, ''), submission_spec, rubr
 	return experiment, nil
 }
 
+func (r *PostgresRepository) ExperimentSubmissionAccess(ctx context.Context, experimentID, studentID string) (ExperimentSubmissionAccess, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return ExperimentSubmissionAccess{}, err
+	}
+	var access ExperimentSubmissionAccess
+	var dueAt pgtype.Timestamptz
+	if err := pool.QueryRow(ctx, `
+SELECT experiments.course_id, experiments.status, experiments.due_at,
+       EXISTS (
+         SELECT 1 FROM enrollments
+         WHERE enrollments.course_id = experiments.course_id
+           AND enrollments.student_id = $2
+           AND enrollments.status = 'active'
+       ) AS enrolled
+FROM experiments
+WHERE experiments.id = $1`, experimentID, studentID).Scan(&access.CourseID, &access.Status, &dueAt, &access.Enrolled); err != nil {
+		return ExperimentSubmissionAccess{}, mapDBError(err)
+	}
+	access.DueAt = nullableTime(dueAt)
+	return access, nil
+}
+
+func (r *PostgresRepository) CreateSubmission(ctx context.Context, submission Submission, audit AuditEntry) (Submission, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return Submission{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return Submission{}, err
+	}
+	defer rollback(ctx, tx)
+	if err := scanSubmission(tx.QueryRow(ctx, `
+INSERT INTO submissions (id, experiment_id, student_id, status, attempt_no)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, experiment_id, student_id, status, attempt_no, submitted_at, created_at, updated_at`,
+		submission.ID, submission.ExperimentID, submission.StudentID, submission.Status, submission.AttemptNo), &submission); err != nil {
+		return Submission{}, mapDBError(err)
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return Submission{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Submission{}, err
+	}
+	return submission, nil
+}
+
+func (r *PostgresRepository) StudentOwnsSubmission(ctx context.Context, submissionID, studentID string) (bool, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return false, err
+	}
+	var owns bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM submissions WHERE id = $1 AND student_id = $2)`, submissionID, studentID).Scan(&owns); err != nil {
+		return false, mapDBError(err)
+	}
+	return owns, nil
+}
+
+func (r *PostgresRepository) SubmissionCourseID(ctx context.Context, submissionID string) (string, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return "", err
+	}
+	var courseID string
+	if err := pool.QueryRow(ctx, `
+SELECT experiments.course_id
+FROM submissions
+JOIN experiments ON experiments.id = submissions.experiment_id
+WHERE submissions.id = $1`, submissionID).Scan(&courseID); err != nil {
+		return "", mapDBError(err)
+	}
+	return courseID, nil
+}
+
+func (r *PostgresRepository) SubmissionArtifactCount(ctx context.Context, submissionID string) (int, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM artifacts WHERE submission_id = $1`, submissionID).Scan(&count); err != nil {
+		return 0, mapDBError(err)
+	}
+	return count, nil
+}
+
+func (r *PostgresRepository) CreateArtifact(ctx context.Context, artifact Artifact, extraction ExtractedContent, job *QueuedJob, audit AuditEntry) (ArtifactWithExtraction, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return ArtifactWithExtraction{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return ArtifactWithExtraction{}, err
+	}
+	defer rollback(ctx, tx)
+	if err := scanArtifact(tx.QueryRow(ctx, `
+INSERT INTO artifacts (id, submission_id, artifact_kind, original_name, content_type, byte_size, sha256_hex, storage_key, source_url, status, metadata, created_by)
+VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), $10, $11, $12)
+RETURNING id, submission_id, artifact_kind, original_name, COALESCE(content_type, ''), byte_size, COALESCE(sha256_hex, ''), COALESCE(storage_key, ''), COALESCE(source_url, ''), status, metadata, created_by, created_at`,
+		artifact.ID, artifact.SubmissionID, artifact.Kind, artifact.OriginalName, artifact.ContentType, artifact.ByteSize, artifact.SHA256Hex, artifact.StorageKey, artifact.SourceURL, artifact.Status, defaultJSON(artifact.Metadata), artifact.CreatedBy), &artifact); err != nil {
+		return ArtifactWithExtraction{}, mapDBError(err)
+	}
+	if err := scanExtraction(tx.QueryRow(ctx, `
+INSERT INTO extracted_contents (id, artifact_id, status, text_excerpt, metadata, error)
+VALUES ($1, $2, $3, $4, $5, NULLIF($6, ''))
+RETURNING id, artifact_id, status, text_excerpt, metadata, COALESCE(error, ''), created_at, updated_at`,
+		extraction.ID, extraction.ArtifactID, extraction.Status, extraction.TextExcerpt, defaultJSON(extraction.Metadata), extraction.Error), &extraction); err != nil {
+		return ArtifactWithExtraction{}, mapDBError(err)
+	}
+	jobID := ""
+	if job != nil {
+		payload := defaultJSON(job.Payload)
+		if _, err := tx.Exec(ctx, `
+INSERT INTO jobs (id, job_type, status, payload)
+VALUES ($1, $2, 'queued', $3)`, job.ID, job.Type, payload); err != nil {
+			return ArtifactWithExtraction{}, mapDBError(err)
+		}
+		jobID = job.ID
+	}
+	nextStatus := "parsed"
+	if extraction.Status == "queued" {
+		nextStatus = "parsing"
+	}
+	if _, err := tx.Exec(ctx, `UPDATE submissions SET status = $2, updated_at = now() WHERE id = $1`, artifact.SubmissionID, nextStatus); err != nil {
+		return ArtifactWithExtraction{}, mapDBError(err)
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return ArtifactWithExtraction{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ArtifactWithExtraction{}, err
+	}
+	return ArtifactWithExtraction{Artifact: artifact, Extraction: extraction, JobID: jobID}, nil
+}
+
+func (r *PostgresRepository) ListSubmissionsForExperiment(ctx context.Context, experimentID string, limit int) ([]Submission, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, experiment_id, student_id, status, attempt_no, submitted_at, created_at, updated_at
+FROM submissions
+WHERE experiment_id = $1
+ORDER BY created_at DESC, id
+LIMIT $2`, experimentID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	submissions := make([]Submission, 0)
+	for rows.Next() {
+		var submission Submission
+		if err := scanSubmission(rows, &submission); err != nil {
+			return nil, mapDBError(err)
+		}
+		submissions = append(submissions, submission)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return submissions, nil
+}
+
+func (r *PostgresRepository) GetSubmissionDetail(ctx context.Context, submissionID string) (SubmissionDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return SubmissionDetail{}, err
+	}
+	var detail SubmissionDetail
+	if err := scanSubmission(pool.QueryRow(ctx, `
+SELECT id, experiment_id, student_id, status, attempt_no, submitted_at, created_at, updated_at
+FROM submissions
+WHERE id = $1`, submissionID), &detail.Submission); err != nil {
+		return SubmissionDetail{}, mapDBError(err)
+	}
+	rows, err := pool.Query(ctx, `
+SELECT artifacts.id, artifacts.submission_id, artifacts.artifact_kind, artifacts.original_name,
+       COALESCE(artifacts.content_type, ''), artifacts.byte_size, COALESCE(artifacts.sha256_hex, ''),
+       COALESCE(artifacts.storage_key, ''), COALESCE(artifacts.source_url, ''), artifacts.status,
+       artifacts.metadata, artifacts.created_by, artifacts.created_at,
+       extracted_contents.id, extracted_contents.artifact_id, extracted_contents.status,
+       extracted_contents.text_excerpt, extracted_contents.metadata, COALESCE(extracted_contents.error, ''),
+       extracted_contents.created_at, extracted_contents.updated_at
+FROM artifacts
+JOIN extracted_contents ON extracted_contents.artifact_id = artifacts.id
+WHERE artifacts.submission_id = $1
+ORDER BY artifacts.created_at, artifacts.id`, submissionID)
+	if err != nil {
+		return SubmissionDetail{}, mapDBError(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var item ArtifactWithExtraction
+		if err := scanArtifactAndExtraction(rows, &item.Artifact, &item.Extraction); err != nil {
+			return SubmissionDetail{}, mapDBError(err)
+		}
+		detail.Artifacts = append(detail.Artifacts, item)
+	}
+	if err := rows.Err(); err != nil {
+		return SubmissionDetail{}, mapDBError(err)
+	}
+	return detail, nil
+}
+
 func rollback(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
 }
@@ -578,6 +787,43 @@ func scanExperiment(row pgx.Row, experiment *Experiment) error {
 	experiment.StartAt = nullableTime(startAt)
 	experiment.DueAt = nullableTime(dueAt)
 	experiment.PublishedAt = nullableTime(publishedAt)
+	return nil
+}
+
+func scanSubmission(row pgx.Row, submission *Submission) error {
+	var submittedAt pgtype.Timestamptz
+	if err := row.Scan(&submission.ID, &submission.ExperimentID, &submission.StudentID, &submission.Status, &submission.AttemptNo, &submittedAt, &submission.CreatedAt, &submission.UpdatedAt); err != nil {
+		return err
+	}
+	submission.SubmittedAt = nullableTime(submittedAt)
+	return nil
+}
+
+func scanArtifact(row pgx.Row, artifact *Artifact) error {
+	var kind string
+	if err := row.Scan(&artifact.ID, &artifact.SubmissionID, &kind, &artifact.OriginalName, &artifact.ContentType, &artifact.ByteSize, &artifact.SHA256Hex, &artifact.StorageKey, &artifact.SourceURL, &artifact.Status, &artifact.Metadata, &artifact.CreatedBy, &artifact.CreatedAt); err != nil {
+		return err
+	}
+	artifact.Kind = ArtifactKind(kind)
+	return nil
+}
+
+func scanExtraction(row pgx.Row, extraction *ExtractedContent) error {
+	if err := row.Scan(&extraction.ID, &extraction.ArtifactID, &extraction.Status, &extraction.TextExcerpt, &extraction.Metadata, &extraction.Error, &extraction.CreatedAt, &extraction.UpdatedAt); err != nil {
+		return err
+	}
+	return nil
+}
+
+func scanArtifactAndExtraction(row pgx.Row, artifact *Artifact, extraction *ExtractedContent) error {
+	var kind string
+	if err := row.Scan(
+		&artifact.ID, &artifact.SubmissionID, &kind, &artifact.OriginalName, &artifact.ContentType, &artifact.ByteSize, &artifact.SHA256Hex, &artifact.StorageKey, &artifact.SourceURL, &artifact.Status, &artifact.Metadata, &artifact.CreatedBy, &artifact.CreatedAt,
+		&extraction.ID, &extraction.ArtifactID, &extraction.Status, &extraction.TextExcerpt, &extraction.Metadata, &extraction.Error, &extraction.CreatedAt, &extraction.UpdatedAt,
+	); err != nil {
+		return err
+	}
+	artifact.Kind = ArtifactKind(kind)
 	return nil
 }
 

@@ -79,6 +79,17 @@ X-Actor-Roles: admin,teacher,student
 - `POST /api/v1/teacher/rubric-template-versions/{versionID}/publish`
 - `POST /api/v1/teacher/courses/{courseID}/experiments`
 - `POST /api/v1/teacher/experiments/{experimentID}/publish`
+- `GET /api/v1/teacher/experiments/{experimentID}/submissions`
+- `GET /api/v1/teacher/submissions/{submissionID}`
+
+学生提交接口：
+
+- `POST /api/v1/student/experiments/{experimentID}/submissions`
+- `POST /api/v1/student/submissions/{submissionID}/artifacts`
+- `POST /api/v1/student/submissions/{submissionID}/artifact-links`
+- `GET /api/v1/student/submissions/{submissionID}`
+
+成果上传与解析详见 `docs/SUBMISSION_UPLOAD.md`。
 
 ## 5. 最小冒烟流程
 

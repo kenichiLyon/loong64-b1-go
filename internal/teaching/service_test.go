@@ -147,6 +147,36 @@ func TestPublishExperimentRequiresAssignedTeacher(t *testing.T) {
 	}
 }
 
+func TestCreateSubmissionRequiresEnrollmentAndPublishedExperiment(t *testing.T) {
+	actor, err := NewActor("student-1", []Role{RoleStudent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{submissionAccess: ExperimentSubmissionAccess{Status: "published", Enrolled: false}})
+	_, err = service.CreateSubmission(context.Background(), actor, "experiment-1", CreateSubmissionInput{}, AuditEntry{})
+	if ErrorKindOf(err) != KindForbidden {
+		t.Fatalf("unenrolled student should be forbidden, got %v", err)
+	}
+
+	service = NewService(&fakeRepo{submissionAccess: ExperimentSubmissionAccess{Status: "draft", Enrolled: true}})
+	_, err = service.CreateSubmission(context.Background(), actor, "experiment-1", CreateSubmissionInput{}, AuditEntry{})
+	if ErrorKindOf(err) != KindValidation {
+		t.Fatalf("unpublished experiment should fail validation, got %v", err)
+	}
+}
+
+func TestCreateGitLinkArtifactRequiresOwnedSubmission(t *testing.T) {
+	actor, err := NewActor("student-1", []Role{RoleStudent})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{ownsSubmission: false})
+	_, err = service.CreateGitLinkArtifact(context.Background(), actor, "submission-1", CreateGitLinkInput{URL: "https://example.edu/repo.git"}, AuditEntry{})
+	if ErrorKindOf(err) != KindForbidden {
+		t.Fatalf("student should not attach artifacts to another submission, got %v", err)
+	}
+}
+
 func validRubricVersionInput() CreateRubricVersionInput {
 	return CreateRubricVersionInput{
 		WeightMode: string(WeightModeStrict100),
@@ -164,6 +194,9 @@ type fakeRepo struct {
 	experimentCourseID        string
 	teacherAllowed            bool
 	createRubricVersionCalled bool
+	submissionAccess          ExperimentSubmissionAccess
+	ownsSubmission            bool
+	artifactCount             int
 }
 
 func (f *fakeRepo) CreateUser(context.Context, User, []Role, AuditEntry) (User, error) {
@@ -222,4 +255,32 @@ func (f *fakeRepo) ExperimentCourseID(context.Context, string) (string, error) {
 }
 func (f *fakeRepo) PublishExperiment(_ context.Context, experimentID string, _ AuditEntry) (Experiment, error) {
 	return Experiment{ID: experimentID, Status: "published"}, nil
+}
+func (f *fakeRepo) ExperimentSubmissionAccess(context.Context, string, string) (ExperimentSubmissionAccess, error) {
+	return f.submissionAccess, nil
+}
+func (f *fakeRepo) CreateSubmission(_ context.Context, submission Submission, _ AuditEntry) (Submission, error) {
+	return submission, nil
+}
+func (f *fakeRepo) StudentOwnsSubmission(context.Context, string, string) (bool, error) {
+	return f.ownsSubmission, nil
+}
+func (f *fakeRepo) SubmissionCourseID(context.Context, string) (string, error) {
+	return "course-1", nil
+}
+func (f *fakeRepo) SubmissionArtifactCount(context.Context, string) (int, error) {
+	return f.artifactCount, nil
+}
+func (f *fakeRepo) CreateArtifact(_ context.Context, artifact Artifact, extraction ExtractedContent, job *QueuedJob, _ AuditEntry) (ArtifactWithExtraction, error) {
+	result := ArtifactWithExtraction{Artifact: artifact, Extraction: extraction}
+	if job != nil {
+		result.JobID = job.ID
+	}
+	return result, nil
+}
+func (f *fakeRepo) ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error) {
+	return nil, nil
+}
+func (f *fakeRepo) GetSubmissionDetail(context.Context, string) (SubmissionDetail, error) {
+	return SubmissionDetail{}, nil
 }
