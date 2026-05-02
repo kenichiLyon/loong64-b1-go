@@ -14,6 +14,8 @@ type Config struct {
 	DatabaseURL               string
 	LLMBaseURL                string
 	LLMModel                  string
+	LLMAPIKey                 string
+	LLMTimeout                time.Duration
 	MigrationsDir             string
 	DevAuthBypass             bool
 	MaxUploadBytes            int64
@@ -33,6 +35,8 @@ func Load() Config {
 		DatabaseURL:               getenv("DATABASE_URL", ""),
 		LLMBaseURL:                getenv("LLM_BASE_URL", ""),
 		LLMModel:                  getenv("LLM_MODEL", ""),
+		LLMAPIKey:                 getenv("LLM_API_KEY", ""),
+		LLMTimeout:                durationFromEnv("LLM_TIMEOUT", 30*time.Second),
 		MigrationsDir:             getenv("MIGRATIONS_DIR", "migrations"),
 		DevAuthBypass:             boolFromEnv("DEV_AUTH_BYPASS", false),
 		MaxUploadBytes:            int64FromEnv("MAX_UPLOAD_BYTES", 50*1024*1024),

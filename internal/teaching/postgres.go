@@ -725,6 +725,174 @@ ORDER BY artifacts.created_at, artifacts.id`, submissionID)
 	return detail, nil
 }
 
+func (r *PostgresRepository) GetEvaluationContext(ctx context.Context, submissionID string) (EvaluationContext, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationContext{}, err
+	}
+	detail, err := r.GetSubmissionDetail(ctx, submissionID)
+	if err != nil {
+		return EvaluationContext{}, err
+	}
+	var evalCtx EvaluationContext
+	evalCtx.Submission = detail.Submission
+	evalCtx.Artifacts = detail.Artifacts
+	if err := scanExperiment(pool.QueryRow(ctx, `
+SELECT experiments.id, experiments.course_id, experiments.title, COALESCE(experiments.description, ''),
+       experiments.submission_spec, experiments.rubric_version_id, experiments.status,
+       experiments.start_at, experiments.due_at, experiments.published_at, experiments.created_by,
+       experiments.created_at, experiments.updated_at
+FROM experiments
+WHERE experiments.id = $1`, detail.Submission.ExperimentID), &evalCtx.Experiment); err != nil {
+		return EvaluationContext{}, mapDBError(err)
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, version_id, code, name, COALESCE(description, ''), weight_bps, max_score, sort_order, required_evidence
+FROM rubric_metrics
+WHERE version_id = $1
+ORDER BY sort_order`, evalCtx.Experiment.RubricVersionID)
+	if err != nil {
+		return EvaluationContext{}, mapDBError(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var metric Metric
+		if err := scanMetric(rows, &metric); err != nil {
+			return EvaluationContext{}, mapDBError(err)
+		}
+		evalCtx.Metrics = append(evalCtx.Metrics, metric)
+	}
+	if err := rows.Err(); err != nil {
+		return EvaluationContext{}, mapDBError(err)
+	}
+	return evalCtx, nil
+}
+
+func (r *PostgresRepository) CreateInitialEvaluation(ctx context.Context, result EvaluationResult, findings []RuleCheckFinding, scores []MetricScore, llmLog *LLMCallLog, audit AuditEntry) (EvaluationResultDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	defer rollback(ctx, tx)
+	if err := scanEvaluationResult(tx.QueryRow(ctx, `
+INSERT INTO evaluation_results (id, submission_id, experiment_id, rubric_version_id, status, rule_status, llm_status,
+                                prompt_version, evidence_snapshot, rule_summary, llm_summary, needs_teacher_review, error, created_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id, submission_id, experiment_id, rubric_version_id, status, rule_status, llm_status, prompt_version,
+          evidence_snapshot, rule_summary, llm_summary, needs_teacher_review, error, created_by, created_at, updated_at`,
+		result.ID, result.SubmissionID, result.ExperimentID, result.RubricVersionID, result.Status, result.RuleStatus, result.LLMStatus,
+		result.PromptVersion, defaultJSON(result.EvidenceSnapshot), defaultJSON(result.RuleSummary), result.LLMSummary, result.NeedsTeacherReview,
+		result.Error, result.CreatedBy), &result); err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	createdFindings := make([]RuleCheckFinding, 0, len(findings))
+	for _, finding := range findings {
+		finding.EvaluationResultID = result.ID
+		if err := scanRuleFinding(tx.QueryRow(ctx, `
+INSERT INTO rule_check_findings (id, evaluation_result_id, category, severity, message, evidence_ref)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, evaluation_result_id, category, severity, message, evidence_ref, created_at`,
+			finding.ID, finding.EvaluationResultID, finding.Category, finding.Severity, finding.Message, finding.EvidenceRef), &finding); err != nil {
+			return EvaluationResultDetail{}, mapDBError(err)
+		}
+		createdFindings = append(createdFindings, finding)
+	}
+	createdScores := make([]MetricScore, 0, len(scores))
+	for _, score := range scores {
+		score.EvaluationResultID = result.ID
+		if err := scanMetricScore(tx.QueryRow(ctx, `
+INSERT INTO metric_scores (id, evaluation_result_id, metric_id, metric_code, source, suggested_score, max_score,
+                           confidence_bps, rationale, evidence_refs)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, evaluation_result_id, metric_id, metric_code, source, suggested_score, max_score, confidence_bps,
+          rationale, evidence_refs, created_at`,
+			score.ID, score.EvaluationResultID, score.MetricID, score.MetricCode, score.Source, score.SuggestedScore, score.MaxScore,
+			score.ConfidenceBPS, score.Rationale, defaultJSON(score.EvidenceRefs)), &score); err != nil {
+			return EvaluationResultDetail{}, mapDBError(err)
+		}
+		createdScores = append(createdScores, score)
+	}
+	if llmLog != nil {
+		llmLog.EvaluationResultID = result.ID
+		if _, err := tx.Exec(ctx, `
+INSERT INTO llm_call_logs (id, evaluation_result_id, provider, model, prompt_version, input_hash, output, status, error,
+                           latency_ms, prompt_tokens, completion_tokens)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			llmLog.ID, llmLog.EvaluationResultID, llmLog.Provider, llmLog.Model, llmLog.PromptVersion, llmLog.InputHash,
+			defaultJSON(llmLog.Output), llmLog.Status, llmLog.Error, llmLog.LatencyMS, llmLog.PromptTokens, llmLog.CompletionTokens); err != nil {
+			return EvaluationResultDetail{}, mapDBError(err)
+		}
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	return EvaluationResultDetail{Result: result, Findings: createdFindings, Scores: createdScores}, nil
+}
+
+func (r *PostgresRepository) GetLatestEvaluation(ctx context.Context, submissionID string) (EvaluationResultDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	var detail EvaluationResultDetail
+	if err := scanEvaluationResult(pool.QueryRow(ctx, `
+SELECT id, submission_id, experiment_id, rubric_version_id, status, rule_status, llm_status, prompt_version,
+       evidence_snapshot, rule_summary, llm_summary, needs_teacher_review, error, created_by, created_at, updated_at
+FROM evaluation_results
+WHERE submission_id = $1
+ORDER BY created_at DESC, id DESC
+LIMIT 1`, submissionID), &detail.Result); err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	findingRows, err := pool.Query(ctx, `
+SELECT id, evaluation_result_id, category, severity, message, evidence_ref, created_at
+FROM rule_check_findings
+WHERE evaluation_result_id = $1
+ORDER BY created_at, id`, detail.Result.ID)
+	if err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	defer findingRows.Close()
+	for findingRows.Next() {
+		var finding RuleCheckFinding
+		if err := scanRuleFinding(findingRows, &finding); err != nil {
+			return EvaluationResultDetail{}, mapDBError(err)
+		}
+		detail.Findings = append(detail.Findings, finding)
+	}
+	if err := findingRows.Err(); err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	scoreRows, err := pool.Query(ctx, `
+SELECT id, evaluation_result_id, metric_id, metric_code, source, suggested_score, max_score, confidence_bps,
+       rationale, evidence_refs, created_at
+FROM metric_scores
+WHERE evaluation_result_id = $1
+ORDER BY source, metric_code`, detail.Result.ID)
+	if err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	defer scoreRows.Close()
+	for scoreRows.Next() {
+		var score MetricScore
+		if err := scanMetricScore(scoreRows, &score); err != nil {
+			return EvaluationResultDetail{}, mapDBError(err)
+		}
+		detail.Scores = append(detail.Scores, score)
+	}
+	if err := scoreRows.Err(); err != nil {
+		return EvaluationResultDetail{}, mapDBError(err)
+	}
+	return detail, nil
+}
+
 func rollback(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
 }
@@ -824,6 +992,42 @@ func scanArtifactAndExtraction(row pgx.Row, artifact *Artifact, extraction *Extr
 		return err
 	}
 	artifact.Kind = ArtifactKind(kind)
+	return nil
+}
+
+func scanMetric(row pgx.Row, metric *Metric) error {
+	return row.Scan(&metric.ID, &metric.VersionID, &metric.Code, &metric.Name, &metric.Description, &metric.WeightBPS, &metric.MaxScore, &metric.SortOrder, &metric.RequiredEvidence)
+}
+
+func scanEvaluationResult(row pgx.Row, result *EvaluationResult) error {
+	var status, ruleStatus, llmStatus string
+	if err := row.Scan(&result.ID, &result.SubmissionID, &result.ExperimentID, &result.RubricVersionID, &status, &ruleStatus, &llmStatus,
+		&result.PromptVersion, &result.EvidenceSnapshot, &result.RuleSummary, &result.LLMSummary, &result.NeedsTeacherReview,
+		&result.Error, &result.CreatedBy, &result.CreatedAt, &result.UpdatedAt); err != nil {
+		return err
+	}
+	result.Status = EvaluationStatus(status)
+	result.RuleStatus = EvaluationStepStatus(ruleStatus)
+	result.LLMStatus = EvaluationStepStatus(llmStatus)
+	return nil
+}
+
+func scanRuleFinding(row pgx.Row, finding *RuleCheckFinding) error {
+	var severity string
+	if err := row.Scan(&finding.ID, &finding.EvaluationResultID, &finding.Category, &severity, &finding.Message, &finding.EvidenceRef, &finding.CreatedAt); err != nil {
+		return err
+	}
+	finding.Severity = FindingSeverity(severity)
+	return nil
+}
+
+func scanMetricScore(row pgx.Row, score *MetricScore) error {
+	var source string
+	if err := row.Scan(&score.ID, &score.EvaluationResultID, &score.MetricID, &score.MetricCode, &source, &score.SuggestedScore,
+		&score.MaxScore, &score.ConfidenceBPS, &score.Rationale, &score.EvidenceRefs, &score.CreatedAt); err != nil {
+		return err
+	}
+	score.Source = MetricScoreSource(source)
 	return nil
 }
 

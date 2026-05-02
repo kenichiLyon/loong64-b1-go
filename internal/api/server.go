@@ -11,6 +11,7 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/health"
 	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
+	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
 )
@@ -38,19 +39,25 @@ func NewHandler(deps Dependencies) http.Handler {
 	mux.HandleFunc("/health", liveHandler(checks))
 	mux.HandleFunc("/health/live", liveHandler(checks))
 	mux.HandleFunc("/health/ready", readyHandler(checks, deps.Config.ReadyTimeout))
+	options := []teaching.ServiceOption{
+		teaching.WithArtifactStore(deps.Store),
+		teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
+	}
+	if deps.Config.LLMBaseURL != "" {
+		llmGateway, err := llm.NewOpenAICompatible(llm.Config{BaseURL: deps.Config.LLMBaseURL, Model: deps.Config.LLMModel, APIKey: deps.Config.LLMAPIKey, Timeout: deps.Config.LLMTimeout})
+		if err != nil {
+			logger.Warn("llm gateway configuration is invalid; llm evaluation will be unavailable", "error", err)
+		} else {
+			options = append(options, teaching.WithLLMClient(llmGateway))
+		}
+	}
 	var teachingService *teaching.Service
 	if deps.DB != nil && deps.DB.Raw() != nil {
 		repo := teaching.NewPostgresRepository(deps.DB)
-		teachingService = teaching.NewService(repo,
-			teaching.WithArtifactStore(deps.Store),
-			teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
-		)
+		teachingService = teaching.NewService(repo, options...)
 	}
 	if teachingService == nil {
-		teachingService = teaching.NewService(nil,
-			teaching.WithArtifactStore(deps.Store),
-			teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
-		)
+		teachingService = teaching.NewService(nil, options...)
 	}
 	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
 		Service:       teachingService,

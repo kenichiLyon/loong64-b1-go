@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 3：成果上传与解析骨架（提交记录、附件存储、Git 链接、解析任务队列）。
+阶段 4：规则核查与 LLM 初评骨架（教师同步触发、本地规则发现、OpenAI-compatible 可选初评、结果持久化）。
 
 已包含：
 
@@ -24,11 +24,11 @@
 - `cmd/migrate`：PostgreSQL 迁移命令。
 - `internal/storage`：本地 ObjectStore 初始化和健康检查。
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
-- `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交与附件服务。
+- `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交、附件、规则核查与初评服务。
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：初始 API 说明。
+- `api/openapi.yaml`：API 说明，当前版本 0.5.0。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 
 ## 快速启动
@@ -77,6 +77,7 @@ MAX_UPLOAD_BYTES=52428800
 MAX_ARTIFACTS_PER_SUBMISSION=20
 LLM_BASE_URL=http://127.0.0.1:8000/v1
 LLM_MODEL=local-model
+LLM_TIMEOUT=30s
 ```
 
 ## 验证
@@ -106,14 +107,16 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 
 `/api/v1` 接口覆盖管理员维护用户/班级/课程/选课、教师维护评价模板和实训任务、学生创建提交并上传成果附件。
 
-阶段 3 支持：
+阶段 3/4 支持：
 
 - 学生创建提交：`POST /api/v1/student/experiments/{experimentID}/submissions`
 - 学生上传附件：`POST /api/v1/student/submissions/{submissionID}/artifacts`
 - 学生登记 Git 链接：`POST /api/v1/student/submissions/{submissionID}/artifact-links`
 - 教师查看提交：`GET /api/v1/teacher/experiments/{experimentID}/submissions`
+- 教师触发规则核查/LLM 初评：`POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`
+- 教师查看最新初评：`GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest`
 
-上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。
+上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布。
 
 开发环境临时使用请求头标识操作者：
 
@@ -122,7 +125,7 @@ X-Actor-ID: teacher-1
 X-Actor-Roles: teacher
 ```
 
-详见 `docs/TEACHING_DOMAIN.md`、`docs/SUBMISSION_UPLOAD.md` 和 `api/openapi.yaml`。
+详见 `docs/TEACHING_DOMAIN.md`、`docs/SUBMISSION_UPLOAD.md`、`docs/VERIFICATION_EVALUATION.md` 和 `api/openapi.yaml`。
 
 ## 部署与本地数据库
 

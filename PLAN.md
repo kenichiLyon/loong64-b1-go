@@ -40,8 +40,8 @@
 - `submissions`：学生或小组提交记录，保存提交状态和当前有效版本。
 - `artifacts`：上传文件或 Git 链接元信息，保存 hash、大小、MIME、对象存储 key。
 - `extracted_contents`：文档文本、截图 OCR、代码结构、报告章节、关键证据片段。
-- `verification_findings`：步骤缺失、逻辑漏洞、格式问题、风险标签和证据来源。
-- `evaluation_results`、`metric_scores`：AI 初评、规则分、教师分、最终分、评语和发布状态。
+- `rule_check_findings`：步骤缺失、逻辑漏洞、格式问题、风险标签和证据来源。
+- `evaluation_results`、`metric_scores`：AI 初评、规则分、指标建议分、置信度和证据引用；教师分、最终分、评语和发布状态在阶段 5 引入。
 - `llm_call_logs`：模型、Prompt 版本、输入摘要 hash、结构化输出、耗时、错误状态。
 - `report_exports`：报表类型、筛选条件、文件格式、对象存储 key、生成状态。
 - `audit_logs`：上传、解析、评价、改分、发布、导出等关键操作留痕。
@@ -186,17 +186,20 @@
 
 交付：
 
-- 规则引擎：提交完整性、步骤覆盖、文档结构、关键证据、明显逻辑风险。
-- LLM Gateway：Provider 抽象、OpenAI-compatible 请求、Prompt 模板版本、超时重试。
-- 脱敏摘要：学生隐私、联系方式、密钥、仓库凭据最小化。
-- 结构化评分输出 schema：指标建议分、理由、证据、风险、置信度。
-- Mock LLM 测试，保证离线 CI 可验证。
+- `evaluation_results`、`rule_check_findings`、`metric_scores`、`llm_call_logs` 迁移表，保存初评运行、规则发现、指标建议分和 LLM 调用摘要。
+- 教师同步触发 API：`POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`；教师查询最新初评 API：`GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest`。
+- 规则引擎：提交完整性、步骤覆盖、文档结构、关键证据、解析状态、明显逻辑风险和 Prompt Injection 风险。
+- LLM Gateway：标准库实现 OpenAI-compatible `/v1/chat/completions`，支持 base URL、model、API key、timeout。
+- 脱敏摘要：学生隐私、联系方式、密钥、仓库凭据最小化；`llm_call_logs` 只保存输入 hash 和结构化输出。
+- 结构化评分输出 schema：指标建议分、理由、证据引用、风险和置信度；本地校验 metric code、分数范围和证据引用。
+- Mock/httptest LLM 测试，保证离线 CI 可验证。
 
 验收：
 
 - 同一提交可看到规则核查结果、AI 初评和证据来源。
 - LLM 输出不合规时进入待人工复核，不覆盖最终成绩。
 - Prompt injection 样例不能覆盖系统评分规则。
+- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
 
 ### 阶段 5：教师复核与成绩发布
 
