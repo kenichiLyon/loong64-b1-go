@@ -29,6 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     steps:
+      - name: Checkout release context
+        uses: actions/checkout@v4
+
       - name: Resolve source build
         id: source
         env:
@@ -39,7 +42,7 @@ jobs:
             head_sha="${{ github.event.workflow_run.head_sha }}"
           else
             run_id="${{ inputs.run_id }}"
-            head_sha="$(gh run view "$run_id" --json headSha --jq .headSha)"
+            head_sha="$(gh run view "$run_id" --repo "$GITHUB_REPOSITORY" --json headSha --jq .headSha)"
           fi
           short_sha="${head_sha:0:12}"
           tag="auto-build-${short_sha}"
@@ -80,11 +83,12 @@ jobs:
           TAG: ${{ steps.source.outputs.tag }}
           HEAD_SHA: ${{ steps.source.outputs.head_sha }}
         run: |
-          if gh release view "$TAG" >/dev/null 2>&1; then
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists; skipping publish."
             exit 0
           fi
           gh release create "$TAG" release-dist/* \
+            --repo "$GITHUB_REPOSITORY" \
             --target "$HEAD_SHA" \
             --title "Auto Build $TAG" \
             --notes-file release-notes.md
