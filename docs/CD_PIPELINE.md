@@ -15,8 +15,9 @@
 步骤：
 
 1. 使用 `golangci-lint` 执行 Go 静态检查，读取 `.golangci.yml`。
-2. PR 场景下，如果仓库配置了 `SOURCERY_TOKEN`，运行 SourceryAI 差异代码审核。
-3. 未配置 `SOURCERY_TOKEN` 时只跳过 SourceryAI，不影响 Go linter。
+2. 使用 Node 24 和 `web/package-lock.json` 安装前端依赖，运行 `npm run build --prefix web`，同时完成 Vue/TypeScript 类型检查和 Vite 构建。
+3. PR 场景下，如果仓库配置了 `SOURCERY_TOKEN`，运行 SourceryAI 差异代码审核。
+4. 未配置 `SOURCERY_TOKEN` 时只跳过 SourceryAI，不影响 Go linter 和前端构建。
 
 详见 `docs/CODE_REVIEW_CI.md`。
 
@@ -36,9 +37,11 @@
 2. 使用 GitHub Actions 当前稳定 Go 工具链。
 3. 检查 `gofmt`。
 4. 运行 `go test ./...`。
-5. 构建 `linux/amd64` 和 `linux/loong64` 服务端二进制。
-6. 生成 `SHA256SUMS`。
-7. 上传名为 `auto-build-<commit sha>` 的 artifact。
+5. 使用 Node 24 执行 `npm ci --prefix web` 与 `npm run build --prefix web`。
+6. 构建 `linux/amd64` 和 `linux/loong64` 服务端二进制。
+7. 打包 `web/dist` 为 `loong64-b1-go-web.tar.gz` 静态前端产物。
+8. 生成 `SHA256SUMS`。
+9. 上传名为 `auto-build-<commit sha>` 的 artifact。
 
 ## CD Publish Artifacts
 

@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 5：教师复核与成绩发布骨架（复核草稿、逐指标最终分、教师评语、发布后学生可见）。
+阶段 5.5：PC Web MVP（学生提交上传、教师核查初评、教师复核发布、学生查看已发布评价）。
 
 已包含：
 
@@ -30,6 +30,7 @@
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：API 说明，当前版本 0.6.0。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
+- `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
 ## 快速启动
 
@@ -97,8 +98,8 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 
 ## CI/CD
 
-- Auto Build：每次 push、PR 或手动触发时运行格式检查、测试、linux/amd64 和 linux/loong64 构建，并上传构建产物。
-- Code Quality Review：每次 push、PR 或手动触发时运行 `golangci-lint`；PR 中配置 `SOURCERY_TOKEN` 后自动运行 SourceryAI 代码审核。
+- Auto Build：每次 push、PR 或手动触发时运行格式检查、Go 测试、Web 构建、linux/amd64 和 linux/loong64 构建，并上传后端二进制与 `loong64-b1-go-web.tar.gz`。
+- Code Quality Review：每次 push、PR 或手动触发时运行 `golangci-lint` 与前端构建；PR 中配置 `SOURCERY_TOKEN` 后自动运行 SourceryAI 代码审核。
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 
 详见 `docs/CD_PIPELINE.md` 和 `docs/CODE_REVIEW_CI.md`。
@@ -129,6 +130,19 @@ X-Actor-Roles: teacher
 ```
 
 详见 `docs/TEACHING_DOMAIN.md`、`docs/SUBMISSION_UPLOAD.md`、`docs/VERIFICATION_EVALUATION.md`、`docs/TEACHER_REVIEW.md` 和 `api/openapi.yaml`。
+
+
+## 前端开发
+
+```bash
+cd web
+npm ci
+npm run dev
+npm run lint
+npm run build
+```
+
+开发服务器默认代理 `/api` 和 `/health` 到 `http://127.0.0.1:8080`，页面顶部可用 `X-Actor-ID` / `X-Actor-Roles` 模拟开发态身份。
 
 ## 部署与本地数据库
 

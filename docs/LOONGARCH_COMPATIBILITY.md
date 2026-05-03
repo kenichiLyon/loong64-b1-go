@@ -68,3 +68,8 @@ PostgreSQL：<psql --version>
 结果：通过 / 失败
 问题与处理：<notes>
 ```
+
+
+## 前端静态资源
+
+Stage 5.5 前端在开发或 CI 环境中使用 Node/Vite 构建，LoongArch + 银河麒麟目标机默认只托管 `web/dist` 静态产物，不要求目标机安装 Node.js。若必须在目标机重新构建，需要单独验证 Node.js 与 npm 依赖在 LoongArch 上可用。
