@@ -71,6 +71,7 @@ jobs:
           - Source commit: ${{ steps.source.outputs.head_sha }}
           - Source workflow run: ${{ steps.source.outputs.run_id }}
           - Target platform: linux/amd64 and linux/loong64
+          - Web artifact: loong64-b1-go-web.tar.gz static bundle
           - Deployment target: LoongArch + 银河麒麟高级服务器版
 
           This CD job publishes artifacts produced by Auto Build without rebuilding them.
