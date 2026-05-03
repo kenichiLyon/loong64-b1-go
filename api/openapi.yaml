@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.5.0
+  version: 0.6.0
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -450,6 +450,89 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvaluationResultDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}/review:
+    get:
+      summary: 教师查看复核草稿或已发布结果
+      operationId: getTeacherSubmissionReview
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 教师复核详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherReviewDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: 教师保存复核草稿
+      operationId: upsertTeacherSubmissionReview
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertTeacherReviewRequest'
+      responses:
+        '200':
+          description: 已保存复核草稿
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherReviewDetail'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}/review/publish:
+    post:
+      summary: 教师发布最终评价
+      operationId: publishTeacherSubmissionReview
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishTeacherReviewRequest'
+      responses:
+        '200':
+          description: 已发布最终评价
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherReviewDetail'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/student/submissions/{submissionId}/review:
+    get:
+      summary: 学生查看已发布最终评价
+      operationId: getStudentPublishedReview
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 已发布最终评价
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeacherReviewDetail'
         '403':
           $ref: '#/components/responses/Error'
         '404':
@@ -1072,6 +1155,131 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/MetricScore'
+    TeacherMetricScoreInput:
+      type: object
+      required: [final_score]
+      properties:
+        metric_id:
+          type: string
+        metric_code:
+          type: string
+        final_score:
+          type: integer
+          minimum: 0
+        source:
+          type: string
+          enum: [manual, rule, llm]
+          default: manual
+        source_metric_score_id:
+          type: string
+        comment:
+          type: string
+        adjustment_reason:
+          type: string
+    UpsertTeacherReviewRequest:
+      type: object
+      required: [scores]
+      properties:
+        evaluation_result_id:
+          type: string
+        teacher_comment:
+          type: string
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherMetricScoreInput'
+    PublishTeacherReviewRequest:
+      type: object
+      required: [confirm]
+      properties:
+        confirm:
+          type: boolean
+          description: 必须为 true，避免误发布。
+    TeacherReview:
+      type: object
+      required: [id, submission_id, experiment_id, rubric_version_id, status, total_score_bps, created_by, updated_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        submission_id:
+          type: string
+        evaluation_result_id:
+          type: string
+        experiment_id:
+          type: string
+        rubric_version_id:
+          type: string
+        status:
+          type: string
+          enum: [draft, published]
+        total_score_bps:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: 整数基点，10000 = 100%。
+        teacher_comment:
+          type: string
+        created_by:
+          type: string
+        updated_by:
+          type: string
+        published_by:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TeacherMetricScore:
+      type: object
+      required: [id, teacher_review_id, metric_id, metric_code, final_score, max_score, weight_bps, source, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        teacher_review_id:
+          type: string
+        metric_id:
+          type: string
+        metric_code:
+          type: string
+        final_score:
+          type: integer
+          minimum: 0
+        max_score:
+          type: integer
+        weight_bps:
+          type: integer
+        source:
+          type: string
+          enum: [manual, rule, llm]
+        source_metric_score_id:
+          type: string
+        comment:
+          type: string
+        adjustment_reason:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TeacherReviewDetail:
+      type: object
+      required: [review, scores]
+      properties:
+        review:
+          $ref: '#/components/schemas/TeacherReview'
+        scores:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeacherMetricScore'
+        ai:
+          $ref: '#/components/schemas/EvaluationResultDetail'
     CreateGitLinkRequest:
       type: object
       required: [url]

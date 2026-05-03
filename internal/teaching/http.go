@@ -51,6 +51,10 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}", h.getSubmissionDetail)
 	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial", h.createInitialEvaluation)
 	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest", h.getLatestEvaluation)
+	mux.HandleFunc("PUT /api/v1/teacher/submissions/{submissionID}/review", h.upsertTeacherReview)
+	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/review/publish", h.publishTeacherReview)
+	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}/review", h.getTeacherReview)
+	mux.HandleFunc("GET /api/v1/student/submissions/{submissionID}/review", h.getTeacherReview)
 }
 
 func (h *HTTPHandler) me(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +413,56 @@ func (h *HTTPHandler) getLatestEvaluation(w http.ResponseWriter, r *http.Request
 		return
 	}
 	detail, err := h.service.GetLatestEvaluation(r.Context(), actor, r.PathValue("submissionID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, detail)
+}
+
+func (h *HTTPHandler) upsertTeacherReview(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input UpsertTeacherReviewInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	detail, err := h.service.UpsertTeacherReview(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, detail)
+}
+
+func (h *HTTPHandler) publishTeacherReview(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input PublishTeacherReviewInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	detail, err := h.service.PublishTeacherReview(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, detail)
+}
+
+func (h *HTTPHandler) getTeacherReview(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	detail, err := h.service.GetTeacherReview(r.Context(), actor, r.PathValue("submissionID"))
 	if err != nil {
 		h.writeError(w, err)
 		return

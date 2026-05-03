@@ -272,18 +272,21 @@ func validRubricVersionInput() CreateRubricVersionInput {
 }
 
 type fakeRepo struct {
-	rubricTemplateOwner       string
-	rubricVersionOwner        string
-	rubricVersionStatus       string
-	experimentCourseID        string
-	teacherAllowed            bool
-	createRubricVersionCalled bool
-	submissionAccess          ExperimentSubmissionAccess
-	ownsSubmission            bool
-	artifactCount             int
-	evaluationContext         EvaluationContext
-	latestEvaluation          EvaluationResultDetail
-	createdEvaluation         EvaluationResultDetail
+	rubricTemplateOwner          string
+	rubricVersionOwner           string
+	rubricVersionStatus          string
+	experimentCourseID           string
+	teacherAllowed               bool
+	createRubricVersionCalled    bool
+	submissionAccess             ExperimentSubmissionAccess
+	ownsSubmission               bool
+	artifactCount                int
+	evaluationContext            EvaluationContext
+	latestEvaluation             EvaluationResultDetail
+	evaluationResultSubmissionID string
+	createdEvaluation            EvaluationResultDetail
+	teacherReview                TeacherReviewDetail
+	publishedReview              TeacherReviewDetail
 }
 
 func (f *fakeRepo) CreateUser(context.Context, User, []Role, AuditEntry) (User, error) {
@@ -380,4 +383,23 @@ func (f *fakeRepo) CreateInitialEvaluation(_ context.Context, result EvaluationR
 }
 func (f *fakeRepo) GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error) {
 	return f.latestEvaluation, nil
+}
+func (f *fakeRepo) EvaluationResultSubmissionID(context.Context, string) (string, error) {
+	if f.evaluationResultSubmissionID != "" {
+		return f.evaluationResultSubmissionID, nil
+	}
+	return "submission-1", nil
+}
+func (f *fakeRepo) UpsertTeacherReview(_ context.Context, review TeacherReview, scores []TeacherMetricScore, _ AuditEntry) (TeacherReviewDetail, error) {
+	f.teacherReview = TeacherReviewDetail{Review: review, Scores: scores}
+	return f.teacherReview, nil
+}
+func (f *fakeRepo) PublishTeacherReview(_ context.Context, submissionID, actorID string, _ AuditEntry) (TeacherReviewDetail, error) {
+	f.publishedReview.Review.SubmissionID = submissionID
+	f.publishedReview.Review.PublishedBy = actorID
+	f.publishedReview.Review.Status = TeacherReviewStatusPublished
+	return f.publishedReview, nil
+}
+func (f *fakeRepo) GetTeacherReview(context.Context, string, bool) (TeacherReviewDetail, error) {
+	return f.teacherReview, nil
 }

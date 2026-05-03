@@ -22,7 +22,7 @@
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
 
-阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。深度 Word/PDF/OCR 解析继续列为 LoongArch 高风险能力，后续必须逐项验证。
+阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。深度 Word/PDF/OCR 解析继续列为 LoongArch 高风险能力，后续必须逐项验证。
 
 ## 必跑检查
 

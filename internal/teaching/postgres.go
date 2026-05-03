@@ -893,8 +893,189 @@ ORDER BY source, metric_code`, detail.Result.ID)
 	return detail, nil
 }
 
+func (r *PostgresRepository) EvaluationResultSubmissionID(ctx context.Context, evaluationResultID string) (string, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return "", err
+	}
+	var submissionID string
+	if err := pool.QueryRow(ctx, `SELECT submission_id FROM evaluation_results WHERE id = $1`, evaluationResultID).Scan(&submissionID); err != nil {
+		return "", mapDBError(err)
+	}
+	return submissionID, nil
+}
+
+func (r *PostgresRepository) UpsertTeacherReview(ctx context.Context, review TeacherReview, scores []TeacherMetricScore, audit AuditEntry) (TeacherReviewDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	defer rollback(ctx, tx)
+	var existingID pgtype.Text
+	var existingStatus pgtype.Text
+	if err := tx.QueryRow(ctx, `SELECT id, status FROM teacher_reviews WHERE submission_id = $1 FOR UPDATE`, review.SubmissionID).Scan(&existingID, &existingStatus); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return TeacherReviewDetail{}, mapDBError(err)
+	}
+	if existingStatus.Valid && existingStatus.String == string(TeacherReviewStatusPublished) {
+		return TeacherReviewDetail{}, conflictError("published teacher review cannot be modified")
+	}
+	if existingID.Valid {
+		review.ID = existingID.String
+		for i := range scores {
+			scores[i].TeacherReviewID = review.ID
+		}
+		if _, err := tx.Exec(ctx, `DELETE FROM teacher_metric_scores WHERE teacher_review_id = $1`, review.ID); err != nil {
+			return TeacherReviewDetail{}, mapDBError(err)
+		}
+		if err := scanTeacherReview(tx.QueryRow(ctx, `
+UPDATE teacher_reviews
+SET evaluation_result_id = NULLIF($2, ''), experiment_id = $3, rubric_version_id = $4, total_score_bps = $5,
+    teacher_comment = $6, updated_by = $7, updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, submission_id, COALESCE(evaluation_result_id, ''), experiment_id, rubric_version_id, status,
+          total_score_bps, teacher_comment, created_by, updated_by, published_by, published_at, created_at, updated_at`,
+			review.ID, review.EvaluationResultID, review.ExperimentID, review.RubricVersionID, review.TotalScoreBPS, review.TeacherComment, review.UpdatedBy), &review); err != nil {
+			return TeacherReviewDetail{}, mapDBError(err)
+		}
+	} else {
+		if err := scanTeacherReview(tx.QueryRow(ctx, `
+INSERT INTO teacher_reviews (id, submission_id, evaluation_result_id, experiment_id, rubric_version_id, status,
+                             total_score_bps, teacher_comment, created_by, updated_by)
+VALUES ($1, $2, NULLIF($3, ''), $4, $5, 'draft', $6, $7, $8, $9)
+RETURNING id, submission_id, COALESCE(evaluation_result_id, ''), experiment_id, rubric_version_id, status,
+          total_score_bps, teacher_comment, created_by, updated_by, published_by, published_at, created_at, updated_at`,
+			review.ID, review.SubmissionID, review.EvaluationResultID, review.ExperimentID, review.RubricVersionID, review.TotalScoreBPS,
+			review.TeacherComment, review.CreatedBy, review.UpdatedBy), &review); err != nil {
+			return TeacherReviewDetail{}, mapDBError(err)
+		}
+	}
+	createdScores, err := insertTeacherMetricScores(ctx, tx, review.ID, scores)
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	return TeacherReviewDetail{Review: review, Scores: createdScores}, nil
+}
+
+func (r *PostgresRepository) PublishTeacherReview(ctx context.Context, submissionID, actorID string, audit AuditEntry) (TeacherReviewDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	defer rollback(ctx, tx)
+	var review TeacherReview
+	if err := scanTeacherReview(tx.QueryRow(ctx, `
+UPDATE teacher_reviews
+SET status = 'published', published_by = $2, published_at = now(), updated_by = $2, updated_at = now()
+WHERE submission_id = $1 AND status = 'draft'
+RETURNING id, submission_id, COALESCE(evaluation_result_id, ''), experiment_id, rubric_version_id, status,
+          total_score_bps, teacher_comment, created_by, updated_by, published_by, published_at, created_at, updated_at`, submissionID, actorID), &review); err != nil {
+		return TeacherReviewDetail{}, mapDBError(err)
+	}
+	scores, err := loadTeacherMetricScores(ctx, tx, review.ID)
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	if len(scores) == 0 {
+		return TeacherReviewDetail{}, conflictError("teacher review has no metric scores")
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	return TeacherReviewDetail{Review: review, Scores: scores}, nil
+}
+
+func (r *PostgresRepository) GetTeacherReview(ctx context.Context, submissionID string, publishedOnly bool) (TeacherReviewDetail, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	query := `
+SELECT id, submission_id, COALESCE(evaluation_result_id, ''), experiment_id, rubric_version_id, status,
+       total_score_bps, teacher_comment, created_by, updated_by, published_by, published_at, created_at, updated_at
+FROM teacher_reviews
+WHERE submission_id = $1`
+	args := []any{submissionID}
+	if publishedOnly {
+		query += ` AND status = 'published'`
+	}
+	query += ` ORDER BY updated_at DESC LIMIT 1`
+	var detail TeacherReviewDetail
+	if err := scanTeacherReview(pool.QueryRow(ctx, query, args...), &detail.Review); err != nil {
+		return TeacherReviewDetail{}, mapDBError(err)
+	}
+	scores, err := loadTeacherMetricScores(ctx, pool, detail.Review.ID)
+	if err != nil {
+		return TeacherReviewDetail{}, err
+	}
+	detail.Scores = scores
+	return detail, nil
+}
+
 func rollback(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
+}
+
+func insertTeacherMetricScores(ctx context.Context, tx pgx.Tx, reviewID string, scores []TeacherMetricScore) ([]TeacherMetricScore, error) {
+	created := make([]TeacherMetricScore, 0, len(scores))
+	for _, score := range scores {
+		score.TeacherReviewID = reviewID
+		if err := scanTeacherMetricScore(tx.QueryRow(ctx, `
+INSERT INTO teacher_metric_scores (id, teacher_review_id, metric_id, metric_code, final_score, max_score, weight_bps,
+                                   source, source_metric_score_id, comment, adjustment_reason)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULLIF($9, ''), $10, $11)
+RETURNING id, teacher_review_id, metric_id, metric_code, final_score, max_score, weight_bps, source,
+          COALESCE(source_metric_score_id, ''), comment, adjustment_reason, created_at, updated_at`,
+			score.ID, score.TeacherReviewID, score.MetricID, score.MetricCode, score.FinalScore, score.MaxScore, score.WeightBPS,
+			score.Source, score.SourceMetricScoreID, score.Comment, score.AdjustmentReason), &score); err != nil {
+			return nil, mapDBError(err)
+		}
+		created = append(created, score)
+	}
+	return created, nil
+}
+
+func loadTeacherMetricScores(ctx context.Context, queryer interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}, reviewID string) ([]TeacherMetricScore, error) {
+	rows, err := queryer.Query(ctx, `
+SELECT id, teacher_review_id, metric_id, metric_code, final_score, max_score, weight_bps, source,
+       COALESCE(source_metric_score_id, ''), comment, adjustment_reason, created_at, updated_at
+FROM teacher_metric_scores
+WHERE teacher_review_id = $1
+ORDER BY metric_code`, reviewID)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	scores := make([]TeacherMetricScore, 0)
+	for rows.Next() {
+		var score TeacherMetricScore
+		if err := scanTeacherMetricScore(rows, &score); err != nil {
+			return nil, mapDBError(err)
+		}
+		scores = append(scores, score)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return scores, nil
 }
 
 func insertAudit(ctx context.Context, tx pgx.Tx, audit AuditEntry) error {
@@ -1029,6 +1210,25 @@ func scanMetricScore(row pgx.Row, score *MetricScore) error {
 	}
 	score.Source = MetricScoreSource(source)
 	return nil
+}
+
+func scanTeacherReview(row pgx.Row, review *TeacherReview) error {
+	var status string
+	var publishedAt pgtype.Timestamptz
+	if err := row.Scan(&review.ID, &review.SubmissionID, &review.EvaluationResultID, &review.ExperimentID, &review.RubricVersionID,
+		&status, &review.TotalScoreBPS, &review.TeacherComment, &review.CreatedBy, &review.UpdatedBy,
+		&review.PublishedBy, &publishedAt, &review.CreatedAt, &review.UpdatedAt); err != nil {
+		return err
+	}
+	review.Status = TeacherReviewStatus(status)
+	review.PublishedAt = nullableTime(publishedAt)
+	return nil
+}
+
+func scanTeacherMetricScore(row pgx.Row, score *TeacherMetricScore) error {
+	return row.Scan(&score.ID, &score.TeacherReviewID, &score.MetricID, &score.MetricCode, &score.FinalScore,
+		&score.MaxScore, &score.WeightBPS, &score.Source, &score.SourceMetricScoreID, &score.Comment,
+		&score.AdjustmentReason, &score.CreatedAt, &score.UpdatedAt)
 }
 
 func nullableTime(value pgtype.Timestamptz) *time.Time {
