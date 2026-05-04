@@ -2,10 +2,11 @@
 import { computed, reactive, ref } from 'vue';
 import ActorSwitcher from './components/ActorSwitcher.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
+import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, EvaluationResultDetail, Submission, SubmissionDetail, TeacherReviewDetail } from './lib/types';
+import type { ActorRole, EvaluationResultDetail, ExperimentReportSummary, ReportExport, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -24,8 +25,12 @@ const submissions = ref<Submission[]>([]);
 const detail = ref<SubmissionDetail | null>(null);
 const evaluation = ref<EvaluationResultDetail | null>(null);
 const review = ref<TeacherReviewDetail | null>(null);
+const report = ref<SubmissionReport | null>(null);
+const summary = ref<ExperimentReportSummary | null>(null);
+const exportResult = ref<ReportExport | null>(null);
 
 const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
+const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
 const mode = reactive({ evaluation: 'rule_only' as 'rule_only' | 'rule_and_llm' });
 
 async function runAction(label: string, action: () => Promise<void>) {
@@ -114,6 +119,33 @@ async function publishReview() {
 async function loadReview(role: 'teacher' | 'student') {
   await runAction(role === 'teacher' ? '读取教师复核' : '读取已发布评价', async () => {
     review.value = await api.getTeacherReview(submissionID.value, role, requestOptions.value);
+  });
+}
+
+async function loadSubmissionReport() {
+  const role = roles.value.includes('teacher') || roles.value.includes('admin') ? 'teacher' : 'student';
+  await runAction('读取个人评价报告', async () => {
+    report.value = await api.getSubmissionReport(submissionID.value, role, requestOptions.value);
+    review.value = report.value.review;
+    evaluation.value = report.value.evaluation ?? evaluation.value;
+  });
+}
+
+async function loadExperimentSummary() {
+  await runAction('读取实验统计', async () => {
+    summary.value = await api.getExperimentReportSummary(experimentID.value, requestOptions.value);
+  });
+}
+
+async function exportSubmissionReport(format: 'html' | 'csv' | 'pdf') {
+  await runAction(`导出个人报告 ${format}`, async () => {
+    exportResult.value = await api.createSubmissionReportExport(submissionID.value, format, requestOptions.value);
+  });
+}
+
+async function exportExperimentSummary(format: 'html' | 'csv' | 'pdf') {
+  await runAction(`导出实验统计 ${format}`, async () => {
+    exportResult.value = await api.createExperimentSummaryExport(experimentID.value, format, requestOptions.value);
   });
 }
 
@@ -220,6 +252,18 @@ function onFileChange(event: Event) {
       <EvaluationPanel :evaluation="evaluation" />
       <ReviewPanel :busy="busy" :evaluation="evaluation" :review="review" @save="saveReview" @publish="publishReview" />
     </section>
+
+    <ReportPanel
+      :busy="busy"
+      :download-url="exportDownloadURL"
+      :export-result="exportResult"
+      :report="report"
+      :summary="summary"
+      @export-submission="exportSubmissionReport"
+      @export-summary="exportExperimentSummary"
+      @load-report="loadSubmissionReport"
+      @load-summary="loadExperimentSummary"
+    />
 
     <section class="card published-card">
       <p class="eyebrow">学生查看发布结果</p>

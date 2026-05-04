@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.6.0
+  version: 0.7.0
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -537,6 +537,149 @@ paths:
           $ref: '#/components/responses/Error'
         '404':
           $ref: '#/components/responses/Error'
+
+  /api/v1/teacher/submissions/{submissionId}/report:
+    get:
+      summary: 教师查看学生个人评价报告
+      operationId: getTeacherSubmissionReport
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 个人评价报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionReport'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/student/submissions/{submissionId}/report:
+    get:
+      summary: 学生查看自己的已发布个人评价报告
+      operationId: getStudentSubmissionReport
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      responses:
+        '200':
+          description: 已发布个人评价报告
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubmissionReport'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/submissions/{submissionId}/report-exports:
+    post:
+      summary: 教师创建个人评价报告导出
+      operationId: createTeacherSubmissionReportExport
+      parameters:
+        - $ref: '#/components/parameters/SubmissionId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportExportRequest'
+      responses:
+        '202':
+          description: 导出任务已记录；HTML/CSV 同步生成，PDF 按 LoongArch 风险策略降级记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportExport'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/experiments/{experimentId}/reports/summary:
+    get:
+      summary: 教师查看实验统计报表
+      operationId: getTeacherExperimentReportSummary
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 实验统计报表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExperimentReportSummary'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/experiments/{experimentId}/report-exports:
+    post:
+      summary: 教师创建实验统计报表导出
+      operationId: createTeacherExperimentReportExport
+      parameters:
+        - $ref: '#/components/parameters/ExperimentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportExportRequest'
+      responses:
+        '202':
+          description: 导出任务已记录；HTML/CSV 同步生成，PDF 按 LoongArch 风险策略降级记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportExport'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/report-exports/{exportId}:
+    get:
+      summary: 教师查询报表导出状态
+      operationId: getTeacherReportExport
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: 导出任务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportExport'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/report-exports/{exportId}/download:
+    get:
+      summary: 教师下载报表导出文件
+      operationId: downloadTeacherReportExport
+      parameters:
+        - $ref: '#/components/parameters/ExportId'
+      responses:
+        '200':
+          description: 导出文件内容
+          headers:
+            X-Content-SHA256:
+              schema:
+                type: string
+          content:
+            text/html:
+              schema:
+                type: string
+            text/csv:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
 components:
   parameters:
     UserId:
@@ -571,6 +714,12 @@ components:
         type: string
     SubmissionId:
       name: submissionId
+      in: path
+      required: true
+      schema:
+        type: string
+    ExportId:
+      name: exportId
       in: path
       required: true
       schema:
@@ -1280,6 +1429,144 @@ components:
             $ref: '#/components/schemas/TeacherMetricScore'
         ai:
           $ref: '#/components/schemas/EvaluationResultDetail'
+
+    SubmissionReport:
+      type: object
+      required: [submission, experiment, artifacts, review, generated_at]
+      properties:
+        submission:
+          $ref: '#/components/schemas/Submission'
+        experiment:
+          $ref: '#/components/schemas/Experiment'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/ArtifactWithExtraction'
+        review:
+          $ref: '#/components/schemas/TeacherReviewDetail'
+        evaluation:
+          $ref: '#/components/schemas/EvaluationResultDetail'
+        generated_at:
+          type: string
+          format: date-time
+    MetricAverage:
+      type: object
+      required: [metric_code, average_score, average_percent_bps, max_score, count]
+      properties:
+        metric_code:
+          type: string
+        average_score:
+          type: integer
+        average_percent_bps:
+          type: integer
+        max_score:
+          type: integer
+        count:
+          type: integer
+    FindingCount:
+      type: object
+      required: [category, severity, count]
+      properties:
+        category:
+          type: string
+        severity:
+          type: string
+          enum: [info, low, medium, high, critical]
+        count:
+          type: integer
+    ExperimentReportSummary:
+      type: object
+      required: [experiment_id, submission_count, submitted_count, published_review_count, average_score_bps, min_score_bps, max_score_bps, score_buckets, submission_status_count, artifact_status_count, metric_averages, finding_counts, generated_at]
+      properties:
+        experiment_id:
+          type: string
+        submission_count:
+          type: integer
+        submitted_count:
+          type: integer
+        published_review_count:
+          type: integer
+        average_score_bps:
+          type: integer
+        min_score_bps:
+          type: integer
+        max_score_bps:
+          type: integer
+        score_buckets:
+          type: object
+          additionalProperties:
+            type: integer
+        submission_status_count:
+          type: object
+          additionalProperties:
+            type: integer
+        artifact_status_count:
+          type: object
+          additionalProperties:
+            type: integer
+        metric_averages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricAverage'
+        finding_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindingCount'
+        generated_at:
+          type: string
+          format: date-time
+    CreateReportExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum: [html, csv, pdf]
+          default: html
+        filters:
+          type: object
+          description: 导出筛选条件快照；服务端会强制写入提交或实验 ID。
+    ReportExport:
+      type: object
+      required: [id, report_type, scope_type, scope_id, format, status, byte_size, filter_json, requested_by, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        report_type:
+          type: string
+          enum: [submission_report, experiment_summary]
+        scope_type:
+          type: string
+          enum: [submission, experiment]
+        scope_id:
+          type: string
+        format:
+          type: string
+          enum: [html, csv, pdf]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed]
+        storage_key:
+          type: string
+        sha256_hex:
+          type: string
+        byte_size:
+          type: integer
+          format: int64
+        filter_json:
+          type: object
+        error:
+          type: string
+        requested_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
     CreateGitLinkRequest:
       type: object
       required: [url]

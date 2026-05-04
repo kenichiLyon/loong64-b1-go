@@ -55,6 +55,13 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/review/publish", h.publishTeacherReview)
 	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}/review", h.getTeacherReview)
 	mux.HandleFunc("GET /api/v1/student/submissions/{submissionID}/review", h.getTeacherReview)
+	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}/report", h.getSubmissionReport)
+	mux.HandleFunc("GET /api/v1/student/submissions/{submissionID}/report", h.getSubmissionReport)
+	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/report-exports", h.createSubmissionReportExport)
+	mux.HandleFunc("GET /api/v1/teacher/experiments/{experimentID}/reports/summary", h.getExperimentReportSummary)
+	mux.HandleFunc("POST /api/v1/teacher/experiments/{experimentID}/report-exports", h.createExperimentSummaryExport)
+	mux.HandleFunc("GET /api/v1/teacher/report-exports/{exportID}", h.getReportExport)
+	mux.HandleFunc("GET /api/v1/teacher/report-exports/{exportID}/download", h.downloadReportExport)
 }
 
 func (h *HTTPHandler) me(w http.ResponseWriter, r *http.Request) {
@@ -468,6 +475,108 @@ func (h *HTTPHandler) getTeacherReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, detail)
+}
+
+func (h *HTTPHandler) getSubmissionReport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	report, err := h.service.GetSubmissionReport(r.Context(), actor, r.PathValue("submissionID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, report)
+}
+
+func (h *HTTPHandler) getExperimentReportSummary(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	summary, err := h.service.GetExperimentReportSummary(r.Context(), actor, r.PathValue("experimentID"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, summary)
+}
+
+func (h *HTTPHandler) createSubmissionReportExport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateReportExportInput
+	if r.Body != nil && r.ContentLength != 0 {
+		if !h.decode(w, r, &input) {
+			return
+		}
+	}
+	export, err := h.service.CreateSubmissionReportExport(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusAccepted, export)
+}
+
+func (h *HTTPHandler) createExperimentSummaryExport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateReportExportInput
+	if r.Body != nil && r.ContentLength != 0 {
+		if !h.decode(w, r, &input) {
+			return
+		}
+	}
+	export, err := h.service.CreateExperimentSummaryExport(r.Context(), actor, r.PathValue("experimentID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusAccepted, export)
+}
+
+func (h *HTTPHandler) getReportExport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	export, err := h.service.GetReportExport(r.Context(), actor, r.PathValue("exportID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, export)
+}
+
+func (h *HTTPHandler) downloadReportExport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	file, err := h.service.OpenReportExport(r.Context(), actor, r.PathValue("exportID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", file.ContentType)
+	w.Header().Set("Content-Disposition", `attachment; filename="`+file.FileName+`"`)
+	if file.Export.SHA256Hex != "" {
+		w.Header().Set("X-Content-SHA256", file.Export.SHA256Hex)
+	}
+	http.ServeFile(w, r, file.Path)
 }
 
 func (h *HTTPHandler) currentActor(r *http.Request) (Actor, error) {

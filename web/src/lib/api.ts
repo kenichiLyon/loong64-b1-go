@@ -1,8 +1,11 @@
 import type {
   ActorProfile,
+  ExperimentReportSummary,
   EvaluationResultDetail,
+  ReportExport,
   Submission,
   SubmissionDetail,
+  SubmissionReport,
   TeacherReviewDetail,
 } from './types';
 
@@ -87,6 +90,34 @@ export class APIClient {
 
   async getTeacherReview(submissionID: string, role: 'teacher' | 'student', options: RequestOptions): Promise<TeacherReviewDetail> {
     return this.request(`/api/v1/${role}/submissions/${encodeURIComponent(submissionID)}/review`, options);
+  }
+
+  async getSubmissionReport(submissionID: string, role: 'teacher' | 'student', options: RequestOptions): Promise<SubmissionReport> {
+    return this.request(`/api/v1/${role}/submissions/${encodeURIComponent(submissionID)}/report`, options);
+  }
+
+  async getExperimentReportSummary(experimentID: string, options: RequestOptions): Promise<ExperimentReportSummary> {
+    return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/reports/summary`, options);
+  }
+
+  async createSubmissionReportExport(submissionID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+    return this.request(`/api/v1/teacher/submissions/${encodeURIComponent(submissionID)}/report-exports`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  }
+
+  async createExperimentSummaryExport(experimentID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+    return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/report-exports`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  }
+
+  reportExportDownloadURL(exportID: string): string {
+    return `${this.baseURL}/api/v1/teacher/report-exports/${encodeURIComponent(exportID)}/download`;
   }
 
   private async request<T>(path: string, options: RequestOptions): Promise<T> {

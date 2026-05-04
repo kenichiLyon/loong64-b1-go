@@ -113,6 +113,66 @@ export interface TeacherReviewDetail {
   ai?: EvaluationResultDetail;
 }
 
+export interface SubmissionReport {
+  submission: Submission;
+  experiment: {
+    id: string;
+    title: string;
+    rubric_version_id: string;
+  };
+  artifacts: ArtifactWithExtraction[];
+  review: TeacherReviewDetail;
+  evaluation?: EvaluationResultDetail;
+  generated_at: string;
+}
+
+export interface MetricAverage {
+  metric_code: string;
+  average_score: number;
+  average_percent_bps: number;
+  max_score: number;
+  count: number;
+}
+
+export interface FindingCount {
+  category: string;
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  count: number;
+}
+
+export interface ExperimentReportSummary {
+  experiment_id: string;
+  submission_count: number;
+  submitted_count: number;
+  published_review_count: number;
+  average_score_bps: number;
+  min_score_bps: number;
+  max_score_bps: number;
+  score_buckets: Record<string, number>;
+  submission_status_count: Record<string, number>;
+  artifact_status_count: Record<string, number>;
+  metric_averages: MetricAverage[];
+  finding_counts: FindingCount[];
+  generated_at: string;
+}
+
+export interface ReportExport {
+  id: string;
+  report_type: 'submission_report' | 'experiment_summary';
+  scope_type: 'submission' | 'experiment';
+  scope_id: string;
+  format: 'html' | 'csv' | 'pdf';
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  storage_key?: string;
+  sha256_hex?: string;
+  byte_size: number;
+  error?: string;
+  requested_by: string;
+  created_at: string;
+  updated_at: string;
+  completed_at?: string;
+}
+
 export interface APIErrorBody {
   error?: {
     code?: string;

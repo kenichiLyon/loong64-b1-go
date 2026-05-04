@@ -272,21 +272,30 @@ func validRubricVersionInput() CreateRubricVersionInput {
 }
 
 type fakeRepo struct {
-	rubricTemplateOwner          string
-	rubricVersionOwner           string
-	rubricVersionStatus          string
-	experimentCourseID           string
-	teacherAllowed               bool
-	createRubricVersionCalled    bool
-	submissionAccess             ExperimentSubmissionAccess
-	ownsSubmission               bool
-	artifactCount                int
-	evaluationContext            EvaluationContext
-	latestEvaluation             EvaluationResultDetail
-	evaluationResultSubmissionID string
-	createdEvaluation            EvaluationResultDetail
-	teacherReview                TeacherReviewDetail
-	publishedReview              TeacherReviewDetail
+	rubricTemplateOwner               string
+	rubricVersionOwner                string
+	rubricVersionStatus               string
+	experimentCourseID                string
+	teacherAllowed                    bool
+	createRubricVersionCalled         bool
+	submissionAccess                  ExperimentSubmissionAccess
+	ownsSubmission                    bool
+	artifactCount                     int
+	evaluationContext                 EvaluationContext
+	latestEvaluation                  EvaluationResultDetail
+	evaluationResultSubmissionID      string
+	createdEvaluation                 EvaluationResultDetail
+	teacherReview                     TeacherReviewDetail
+	publishedReview                   TeacherReviewDetail
+	lastGetTeacherReviewPublishedOnly bool
+	reportExports                     map[string]ReportExport
+	experimentSummaries               map[string]experimentReportItem
+}
+
+type experimentReportItem struct {
+	detail     SubmissionDetail
+	review     TeacherReviewDetail
+	evaluation EvaluationResultDetail
 }
 
 func (f *fakeRepo) CreateUser(context.Context, User, []Role, AuditEntry) (User, error) {
@@ -369,9 +378,19 @@ func (f *fakeRepo) CreateArtifact(_ context.Context, artifact Artifact, extracti
 	return result, nil
 }
 func (f *fakeRepo) ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error) {
+	if len(f.experimentSummaries) > 0 {
+		submissions := make([]Submission, 0, len(f.experimentSummaries))
+		for _, item := range f.experimentSummaries {
+			submissions = append(submissions, item.detail.Submission)
+		}
+		return submissions, nil
+	}
 	return nil, nil
 }
-func (f *fakeRepo) GetSubmissionDetail(context.Context, string) (SubmissionDetail, error) {
+func (f *fakeRepo) GetSubmissionDetail(_ context.Context, submissionID string) (SubmissionDetail, error) {
+	if item, ok := f.experimentSummaries[submissionID]; ok {
+		return item.detail, nil
+	}
 	return SubmissionDetail{}, nil
 }
 func (f *fakeRepo) GetEvaluationContext(context.Context, string) (EvaluationContext, error) {
@@ -381,7 +400,10 @@ func (f *fakeRepo) CreateInitialEvaluation(_ context.Context, result EvaluationR
 	f.createdEvaluation = EvaluationResultDetail{Result: result, Findings: findings, Scores: scores}
 	return f.createdEvaluation, nil
 }
-func (f *fakeRepo) GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error) {
+func (f *fakeRepo) GetLatestEvaluation(_ context.Context, submissionID string) (EvaluationResultDetail, error) {
+	if item, ok := f.experimentSummaries[submissionID]; ok {
+		return item.evaluation, nil
+	}
 	return f.latestEvaluation, nil
 }
 func (f *fakeRepo) EvaluationResultSubmissionID(context.Context, string) (string, error) {
@@ -400,6 +422,30 @@ func (f *fakeRepo) PublishTeacherReview(_ context.Context, submissionID, actorID
 	f.publishedReview.Review.Status = TeacherReviewStatusPublished
 	return f.publishedReview, nil
 }
-func (f *fakeRepo) GetTeacherReview(context.Context, string, bool) (TeacherReviewDetail, error) {
+func (f *fakeRepo) GetTeacherReview(_ context.Context, submissionID string, publishedOnly bool) (TeacherReviewDetail, error) {
+	f.lastGetTeacherReviewPublishedOnly = publishedOnly
+	if item, ok := f.experimentSummaries[submissionID]; ok {
+		return item.review, nil
+	}
 	return f.teacherReview, nil
+}
+func (f *fakeRepo) CreateReportExport(_ context.Context, export ReportExport, _ AuditEntry) (ReportExport, error) {
+	if f.reportExports == nil {
+		f.reportExports = map[string]ReportExport{}
+	}
+	f.reportExports[export.ID] = export
+	return export, nil
+}
+func (f *fakeRepo) CompleteReportExport(_ context.Context, export ReportExport) (ReportExport, error) {
+	if f.reportExports == nil {
+		f.reportExports = map[string]ReportExport{}
+	}
+	f.reportExports[export.ID] = export
+	return export, nil
+}
+func (f *fakeRepo) GetReportExport(_ context.Context, exportID string) (ReportExport, error) {
+	if export, ok := f.reportExports[exportID]; ok {
+		return export, nil
+	}
+	return ReportExport{}, notFoundError("resource not found")
 }
