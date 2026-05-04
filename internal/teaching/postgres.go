@@ -1028,6 +1028,74 @@ WHERE submission_id = $1`
 	return detail, nil
 }
 
+func (r *PostgresRepository) CreateReportExport(ctx context.Context, export ReportExport, audit AuditEntry) (ReportExport, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return ReportExport{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return ReportExport{}, err
+	}
+	defer rollback(ctx, tx)
+	if err := scanReportExport(tx.QueryRow(ctx, `
+INSERT INTO report_exports (id, report_type, scope_type, scope_id, format, status, filter_json, requested_by)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, report_type, scope_type, scope_id, format, status, storage_key, sha256_hex, byte_size,
+          filter_json, error, requested_by, created_at, updated_at, completed_at`,
+		export.ID, export.ReportType, export.ScopeType, export.ScopeID, export.Format, export.Status,
+		defaultJSON(export.FilterJSON), export.RequestedBy), &export); err != nil {
+		return ReportExport{}, mapDBError(err)
+	}
+	if _, err := tx.Exec(ctx, `
+INSERT INTO jobs (id, job_type, status, payload)
+VALUES ($1, $2, 'queued', $3)`,
+		NewID("job"), ReportExportJobType, mustJSON(map[string]any{"report_export_id": export.ID, "report_type": export.ReportType, "scope_type": export.ScopeType, "scope_id": export.ScopeID, "format": export.Format})); err != nil {
+		return ReportExport{}, mapDBError(err)
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return ReportExport{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return ReportExport{}, err
+	}
+	return export, nil
+}
+
+func (r *PostgresRepository) CompleteReportExport(ctx context.Context, export ReportExport) (ReportExport, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return ReportExport{}, err
+	}
+	if err := scanReportExport(pool.QueryRow(ctx, `
+UPDATE report_exports
+SET status = $2, storage_key = $3, sha256_hex = $4, byte_size = $5, error = $6,
+    completed_at = now(), updated_at = now()
+WHERE id = $1
+RETURNING id, report_type, scope_type, scope_id, format, status, storage_key, sha256_hex, byte_size,
+          filter_json, error, requested_by, created_at, updated_at, completed_at`,
+		export.ID, export.Status, export.StorageKey, export.SHA256Hex, export.ByteSize, export.Error), &export); err != nil {
+		return ReportExport{}, mapDBError(err)
+	}
+	return export, nil
+}
+
+func (r *PostgresRepository) GetReportExport(ctx context.Context, exportID string) (ReportExport, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return ReportExport{}, err
+	}
+	var export ReportExport
+	if err := scanReportExport(pool.QueryRow(ctx, `
+SELECT id, report_type, scope_type, scope_id, format, status, storage_key, sha256_hex, byte_size,
+       filter_json, error, requested_by, created_at, updated_at, completed_at
+FROM report_exports
+WHERE id = $1`, exportID), &export); err != nil {
+		return ReportExport{}, mapDBError(err)
+	}
+	return export, nil
+}
+
 func rollback(ctx context.Context, tx pgx.Tx) {
 	_ = tx.Rollback(ctx)
 }
@@ -1229,6 +1297,22 @@ func scanTeacherMetricScore(row pgx.Row, score *TeacherMetricScore) error {
 	return row.Scan(&score.ID, &score.TeacherReviewID, &score.MetricID, &score.MetricCode, &score.FinalScore,
 		&score.MaxScore, &score.WeightBPS, &score.Source, &score.SourceMetricScoreID, &score.Comment,
 		&score.AdjustmentReason, &score.CreatedAt, &score.UpdatedAt)
+}
+
+func scanReportExport(row pgx.Row, export *ReportExport) error {
+	var reportType, scopeType, format, status string
+	var completedAt pgtype.Timestamptz
+	if err := row.Scan(&export.ID, &reportType, &scopeType, &export.ScopeID, &format, &status,
+		&export.StorageKey, &export.SHA256Hex, &export.ByteSize, &export.FilterJSON, &export.Error,
+		&export.RequestedBy, &export.CreatedAt, &export.UpdatedAt, &completedAt); err != nil {
+		return err
+	}
+	export.ReportType = ReportType(reportType)
+	export.ScopeType = ReportScopeType(scopeType)
+	export.Format = ReportFormat(format)
+	export.Status = ReportExportStatus(status)
+	export.CompletedAt = nullableTime(completedAt)
+	return nil
 }
 
 func nullableTime(value pgtype.Timestamptz) *time.Time {

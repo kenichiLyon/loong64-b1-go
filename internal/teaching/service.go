@@ -163,6 +163,9 @@ type Repository interface {
 	UpsertTeacherReview(context.Context, TeacherReview, []TeacherMetricScore, AuditEntry) (TeacherReviewDetail, error)
 	PublishTeacherReview(context.Context, string, string, AuditEntry) (TeacherReviewDetail, error)
 	GetTeacherReview(context.Context, string, bool) (TeacherReviewDetail, error)
+	CreateReportExport(context.Context, ReportExport, AuditEntry) (ReportExport, error)
+	CompleteReportExport(context.Context, ReportExport) (ReportExport, error)
+	GetReportExport(context.Context, string) (ReportExport, error)
 }
 
 type Service struct {

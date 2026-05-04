@@ -22,7 +22,7 @@
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
 
-阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。深度 Word/PDF/OCR 解析继续列为 LoongArch 高风险能力，后续必须逐项验证。
+阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。阶段 6 报表 MVP 使用 Go 标准库生成 HTML/CSV，PDF 在未完成 LoongArch 渲染器与中文字体验证前只记录降级状态。深度 Word/PDF/OCR 解析和正式 PDF 生成继续列为 LoongArch 高风险能力，后续必须逐项验证。
 
 ## 必跑检查
 
@@ -48,8 +48,8 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 | ZIP/代码包检查 | Go 标准库 `archive/zip` | 低 | 拒绝路径穿越、符号链接和超大解压 |
 | Word/PDF 解析 | 纯 Go 优先，可替换外部工具 | 高 | 解析失败时保留原文查看和人工复核 |
 | 截图 OCR | 可选能力 | 高 | OCR 不可用时只保存图片和人工查看 |
-| Excel 导出 | 纯 Go XLSX 库 | 中 | 导出 CSV 或简化 XLSX |
-| PDF 导出 | HTML 规范视图 + PDF 模板 | 高 | 图表降级为表格，保留 HTML 归档 |
+| Excel 导出 | Stage 6 MVP 使用 UTF-8 BOM CSV；后续纯 Go XLSX 库 | 中 | 导出 CSV 或简化 XLSX |
+| PDF 导出 | HTML 规范视图 + PDF 模板；MVP 先记录待配置 | 高 | 图表降级为表格，保留 HTML 归档 |
 | 本地模型服务 | OpenAI-compatible HTTP | 高 | 使用学校内网或云端模型网关 |
 | 容器部署 | Podman/Docker 可选 | 中 | systemd 非容器部署为主 |
 

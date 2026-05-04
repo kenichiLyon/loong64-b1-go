@@ -319,10 +319,56 @@ label {
   margin-top: 14px;
 }
 
+.report-panel,
 .published-card {
   margin-top: 18px;
   display: grid;
   gap: 10px;
+}
+
+.report-actions button {
+  background: var(--blue);
+}
+
+.compact-facts {
+  margin-bottom: 8px;
+}
+
+.summary-block {
+  display: grid;
+  gap: 12px;
+}
+
+.summary-block h3 {
+  margin: 0.4rem 0 0;
+}
+
+.bucket-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.bucket-row span,
+.export-result {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.export-result.succeeded {
+  border-color: rgba(96, 114, 65, 0.45);
+}
+
+.export-result.failed {
+  border-color: rgba(216, 74, 39, 0.45);
+  background: rgba(216, 74, 39, 0.08);
+}
+
+.export-result a {
+  color: var(--blue);
+  font-weight: 700;
 }
 
 @keyframes rise {
