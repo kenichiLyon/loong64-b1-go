@@ -4,6 +4,7 @@ import type {
   ExperimentReportSummary,
   EvaluationResultDetail,
   ReportExport,
+  RuntimeConfigSummary,
   Submission,
   SubmissionDetail,
   SubmissionReport,
@@ -126,6 +127,18 @@ export class APIClient {
       ...options,
       method: 'POST',
       body: JSON.stringify({ format }),
+    });
+  }
+
+  async getRuntimeConfig(options: RequestOptions): Promise<RuntimeConfigSummary> {
+    return this.request('/api/v1/admin/runtime-config', options);
+  }
+
+  async updateRuntimeConfig(payload: { db_driver: 'sqlite' | 'postgres'; sqlite_path?: string; database_url?: string; auto_migrate?: boolean }, options: RequestOptions): Promise<RuntimeConfigSummary> {
+    return this.request('/api/v1/admin/runtime-config', {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(payload),
     });
   }
 

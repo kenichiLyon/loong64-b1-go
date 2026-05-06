@@ -22,6 +22,9 @@ func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 	cfg := config.Load()
+	if cfg.RuntimeConfigError != "" {
+		logger.Warn("runtime config load failed; falling back to env/default configuration", "path", cfg.RuntimeConfigPath, "error", cfg.RuntimeConfigError)
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

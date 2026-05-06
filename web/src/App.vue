@@ -4,9 +4,10 @@ import ActorSwitcher from './components/ActorSwitcher.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
 import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
+import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorRole, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -30,6 +31,7 @@ const report = ref<SubmissionReport | null>(null);
 const summary = ref<ExperimentReportSummary | null>(null);
 const courseSummary = ref<CourseReportSummary | null>(null);
 const exportResult = ref<ReportExport | null>(null);
+const runtimeConfig = ref<RuntimeConfigSummary | null>(null);
 
 const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -163,6 +165,18 @@ async function exportCourseSummary(format: 'html' | 'csv' | 'pdf') {
   });
 }
 
+async function loadRuntimeConfig() {
+  await runAction('读取运行配置', async () => {
+    runtimeConfig.value = await api.getRuntimeConfig(requestOptions.value);
+  });
+}
+
+async function saveRuntimeConfig(payload: { db_driver: 'sqlite' | 'postgres'; sqlite_path?: string; database_url?: string; auto_migrate?: boolean }) {
+  await runAction('保存运行配置', async () => {
+    runtimeConfig.value = await api.updateRuntimeConfig(payload, requestOptions.value);
+  });
+}
+
 function onFileChange(event: Event) {
   selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
 }
@@ -183,6 +197,14 @@ function onFileChange(event: Event) {
     </section>
 
     <ActorSwitcher v-model:actor-id="actorID" v-model:roles="roles" />
+
+    <RuntimeConfigPanel
+      v-if="roles.includes('admin')"
+      :busy="busy"
+      :summary="runtimeConfig"
+      @load="loadRuntimeConfig"
+      @save="saveRuntimeConfig"
+    />
 
     <section class="workspace-grid">
       <section class="card flow-card student-flow">
