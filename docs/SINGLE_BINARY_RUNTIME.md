@@ -51,6 +51,8 @@
 
 ### 阶段 B：数据库运行时抽象
 
+状态：已完成基础落地
+
 目标：让服务支持 `sqlite` 与 `postgres` 两种后端。
 
 改造：
@@ -76,6 +78,15 @@
 
 - `DB_DRIVER=sqlite` 时，无外部数据库也能完成最小主链路。
 - `DB_DRIVER=postgres` 时，保留现有能力。
+
+当前实现说明：
+
+- 配置已支持 `DB_DRIVER=sqlite|postgres` 与 `SQLITE_PATH`。
+- SQLite 模式下服务启动默认执行自动迁移，直接运行二进制即可完成本地初始化。
+- `internal/database` 已支持 PostgreSQL / SQLite 双驱动。
+- `cmd/migrate` 已按驱动选择根迁移目录或 `migrations/sqlite`。
+- `internal/teaching` 已接入 `SQLiteRepository`，并通过集成测试覆盖管理员建课、教师建任务、学生建提交最小链路。
+- 运行期“前端切换数据库并持久化配置”的向导尚未实现。
 
 ### 阶段 C：首次启动设置向导
 

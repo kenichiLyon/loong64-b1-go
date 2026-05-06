@@ -70,10 +70,24 @@ sudo chown -R loong64b1:loong64b1 /opt/loong64-b1-go/web
 
 编辑 `/etc/loong64-b1-go/loong64-b1-go.env`，至少修改：
 
-- `DATABASE_URL`
+- `DB_DRIVER`
 - `LLM_BASE_URL`
 - `LLM_MODEL`
 - `LLM_API_KEY`，如使用需要鉴权的模型网关
+
+SQLite 默认示例：
+
+```env
+DB_DRIVER=sqlite
+SQLITE_PATH=/var/lib/loong64-b1-go/data/loong64-b1-go.db
+```
+
+PostgreSQL 示例：
+
+```env
+DB_DRIVER=postgres
+DATABASE_URL=postgres://loong64_b1:CHANGE_ME@127.0.0.1:5432/loong64_b1?sslmode=disable
+```
 
 本地模型示例：
 
@@ -115,7 +129,7 @@ curl -fsS http://127.0.0.1:8080/health/live
 curl -fsS http://127.0.0.1:8080/health/ready
 ```
 
-`ready` 必须覆盖 PostgreSQL 和本地对象存储。
+`ready` 必须覆盖当前数据库驱动和本地对象存储。
 
 ## 8. 备份与恢复
 

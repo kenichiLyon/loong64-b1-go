@@ -12,6 +12,7 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/api"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
+	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
 )
 
@@ -30,7 +31,7 @@ func main() {
 	}
 
 	var db *database.Pool
-	if cfg.DatabaseURL != "" {
+	if cfg.DBDriver != "" {
 		connectCtx, cancel := context.WithTimeout(ctx, cfg.ReadyTimeout)
 		var err error
 		db, err = database.Open(connectCtx, cfg)
@@ -40,8 +41,17 @@ func main() {
 			os.Exit(1)
 		}
 		defer db.Close()
+		if cfg.AutoMigrate {
+			runner := migrate.NewRunner(db, cfg.MigrationsDir)
+			applied, err := runner.Up(ctx)
+			if err != nil {
+				logger.Error("automatic migration failed", "error", err)
+				os.Exit(1)
+			}
+			logger.Info("automatic migration completed", "applied", len(applied), "driver", db.Driver())
+		}
 	} else {
-		logger.Warn("DATABASE_URL is not configured; readiness check will report postgres as failed")
+		logger.Warn("database is not configured; readiness check will report database as failed")
 	}
 
 	server := &http.Server{

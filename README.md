@@ -14,14 +14,14 @@
 
 ## 当前状态
 
-阶段 7 已完成，阶段 7.5 第一段已完成：支持内嵌前端的单二进制构建；默认 SQLite 仍在后续实现。
+阶段 7 已完成，阶段 7.5 前两段已推进：支持内嵌前端的单二进制构建，并已打通默认 SQLite 运行基础。
 
 已包含：
 
 - `AGENT.md`：固定开发流程和 GitHub MCP 远端提交流程。
 - `PLAN.md`：完整开发计划、阶段验收和 LoongArch 检查清单。
 - `cmd/server`：Go HTTP 服务、请求日志、请求 ID、panic recovery、live/ready 健康检查。
-- `cmd/migrate`：PostgreSQL 迁移命令。
+- `cmd/migrate`：支持 PostgreSQL / SQLite 的迁移命令。
 - `internal/storage`：本地 ObjectStore 初始化和健康检查。
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
 - `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交、附件、规则核查、初评、教师复核发布和报表导出服务。
@@ -42,6 +42,14 @@ go run ./cmd/server
 
 默认监听：`http://127.0.0.1:8080`
 
+当前默认数据库模式是本地 SQLite：
+
+```bash
+DB_DRIVER=sqlite
+SQLITE_PATH=./data/loong64-b1-go.db
+AUTO_MIGRATE=true
+```
+
 如果需要构建可直接托管前端页面的完整二进制，先构建前端，再使用 `webui` build tag：
 
 ```bash
@@ -57,18 +65,29 @@ curl http://127.0.0.1:8080/health/live
 curl http://127.0.0.1:8080/health/ready
 ```
 
-`/health/ready` 会检查 PostgreSQL 和本地对象存储；未设置 `DATABASE_URL` 时会返回 503，这是预期行为。
+`/health/ready` 会检查当前数据库驱动和本地对象存储。默认 SQLite 模式下，只要数据库文件可打开且存储目录可写，`ready` 应返回 `200`。
 
 ## 数据库迁移
 
+默认 SQLite：
+
 ```bash
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/migrate up
+DB_DRIVER=sqlite SQLITE_PATH=./data/loong64-b1-go.db go run ./cmd/migrate up
+```
+
+默认情况下，`cmd/server` 在 SQLite 模式下会自动执行迁移，因此本地直接运行服务二进制即可初始化数据库；`cmd/migrate` 仍保留给显式迁移、脚本化部署和 PostgreSQL 场景。
+
+PostgreSQL：
+
+```bash
+DB_DRIVER=postgres DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/migrate up
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable'; go run ./cmd/migrate up
+$env:DB_DRIVER='sqlite'; $env:SQLITE_PATH='./data/loong64-b1-go.db'; go run ./cmd/migrate up
+$env:DB_DRIVER='postgres'; $env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable'; go run ./cmd/migrate up
 ```
 
 ## 可选环境变量
@@ -82,6 +101,9 @@ HTTP_SHUTDOWN_TIMEOUT=10s
 READY_TIMEOUT=2s
 STORAGE_ROOT=./storage
 MIGRATIONS_DIR=migrations
+DB_DRIVER=sqlite
+SQLITE_PATH=./data/loong64-b1-go.db
+AUTO_MIGRATE=true
 DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable
 DB_MAX_CONNS=10
 MAX_UPLOAD_BYTES=52428800
@@ -166,6 +188,7 @@ npm run build
 
 - 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
 - Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
+- 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
 - 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`
 
 ## 目录规划

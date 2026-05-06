@@ -59,9 +59,15 @@ func NewHandler(deps Dependencies) http.Handler {
 		}
 	}
 	var teachingService *teaching.Service
-	if deps.DB != nil && deps.DB.Raw() != nil {
-		repo := teaching.NewPostgresRepository(deps.DB)
-		teachingService = teaching.NewService(repo, options...)
+	if deps.DB != nil {
+		switch {
+		case deps.DB.IsPostgres():
+			repo := teaching.NewPostgresRepository(deps.DB)
+			teachingService = teaching.NewService(repo, options...)
+		case deps.DB.IsSQLite():
+			repo := teaching.NewSQLiteRepository(deps.DB)
+			teachingService = teaching.NewService(repo, options...)
+		}
 	}
 	if teachingService == nil {
 		teachingService = teaching.NewService(nil, options...)
