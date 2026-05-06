@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 6：统计报表与导出增强版（个人报告、实验统计、课程跨实验统计、HTML/CSV 导出、PDF 降级记录）。
+阶段 7：部署验证资产补齐中（Stage 6 课程统计已完成，当前补充麒麟目标机验证脚本、Nginx 示例与运维文档）。
 
 已包含：
 
@@ -27,6 +27,7 @@
 - `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交、附件、规则核查、初评、教师复核发布和报表导出服务。
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
+- `deploy/kylin/nginx`：银河麒麟静态站点与反向代理示例。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：API 说明，当前版本 0.7.1。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
@@ -155,6 +156,7 @@ npm run build
 ## 部署与本地数据库
 
 - 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
+- Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`
 
 ## 目录规划
