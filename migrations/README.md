@@ -23,6 +23,7 @@ $env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmod
 000004_evaluation_initial.sql
 000005_teacher_review_publish.sql
 000006_report_exports.sql
+000007_report_course_summary.sql
 ```
 
 ## 当前迁移说明
@@ -33,5 +34,6 @@ $env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmod
 - `000004_evaluation_initial.sql`：规则核查、LLM 初评、指标建议分和调用日志。
 - `000005_teacher_review_publish.sql`：教师复核、逐指标最终分、发布与不可变约束。
 - `000006_report_exports.sql`：报表导出任务记录、筛选条件、对象存储 key、hash 和状态。
+- `000007_report_course_summary.sql`：扩展报表导出约束，支持 `course_summary` 报表类型和 `course` 作用域。
 
 迁移文件一旦提交，不得修改已应用文件内容；需要变更时新增下一个版本。

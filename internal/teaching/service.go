@@ -149,6 +149,7 @@ type Repository interface {
 	ExperimentCourseID(context.Context, string) (string, error)
 	PublishExperiment(context.Context, string, AuditEntry) (Experiment, error)
 	ExperimentSubmissionAccess(context.Context, string, string) (ExperimentSubmissionAccess, error)
+	ListExperimentsForCourse(context.Context, string, int) ([]Experiment, error)
 	CreateSubmission(context.Context, Submission, AuditEntry) (Submission, error)
 	StudentOwnsSubmission(context.Context, string, string) (bool, error)
 	SubmissionCourseID(context.Context, string) (string, error)

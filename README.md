@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 6：统计报表与导出 MVP（个人报告、实验统计、HTML/CSV 导出、PDF 降级记录）。
+阶段 6：统计报表与导出增强版（个人报告、实验统计、课程跨实验统计、HTML/CSV 导出、PDF 降级记录）。
 
 已包含：
 
@@ -28,7 +28,7 @@
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.0。
+- `api/openapi.yaml`：API 说明，当前版本 0.7.1。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
@@ -122,11 +122,13 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 - 教师查看个人评价报告：`GET /api/v1/teacher/submissions/{submissionID}/report`
 - 学生查看已发布个人报告：`GET /api/v1/student/submissions/{submissionID}/report`
 - 教师查看实验统计：`GET /api/v1/teacher/experiments/{experimentID}/reports/summary`
+- 教师查看课程统计：`GET /api/v1/teacher/courses/{courseID}/reports/summary`
 - 教师导出个人报告：`POST /api/v1/teacher/submissions/{submissionID}/report-exports`
 - 教师导出实验统计：`POST /api/v1/teacher/experiments/{experimentID}/report-exports`
+- 教师导出课程统计：`POST /api/v1/teacher/courses/{courseID}/report-exports`
 - 教师查询/下载导出：`GET /api/v1/teacher/report-exports/{exportID}` 与 `/download`
 
-上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布；阶段 5 发布后的教师最终评价对学生可见且不可被后台初评覆盖。阶段 6 的 HTML 报表是规范归档源，CSV 带 UTF-8 BOM 便于 WPS/Excel/LibreOffice 打开；PDF 当前不引入未验证 native/浏览器依赖，按 LoongArch 风险策略记录为待配置。
+上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布；阶段 5 发布后的教师最终评价对学生可见且不可被后台初评覆盖。阶段 6 的 HTML 报表是规范归档源，CSV 带 UTF-8 BOM 便于 WPS/Excel/LibreOffice 打开；现已补齐课程跨实验统计与对应 CSV 导出。PDF 当前不引入未验证 native/浏览器依赖，按 LoongArch 风险策略记录为待配置。
 
 开发环境临时使用请求头标识操作者：
 

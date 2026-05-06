@@ -31,6 +31,80 @@ func (s *Service) GetExperimentReportSummary(ctx context.Context, actor Actor, e
 	if err := s.requireTeacherExperimentAccess(ctx, actor, experimentID); err != nil {
 		return ExperimentReportSummary{}, err
 	}
+	return s.buildExperimentReportSummary(ctx, experimentID, limit)
+}
+
+func (s *Service) GetCourseReportSummary(ctx context.Context, actor Actor, courseID string, limit int) (CourseReportSummary, error) {
+	if err := s.ready(); err != nil {
+		return CourseReportSummary{}, err
+	}
+	courseID = strings.TrimSpace(courseID)
+	if err := s.requireTeacherCourseAccess(ctx, actor, courseID); err != nil {
+		return CourseReportSummary{}, err
+	}
+	experiments, err := s.repo.ListExperimentsForCourse(ctx, courseID, clampLimit(limit))
+	if err != nil {
+		return CourseReportSummary{}, err
+	}
+	summary := CourseReportSummary{
+		CourseID:              courseID,
+		ExperimentCount:       len(experiments),
+		ScoreBuckets:          emptyScoreBuckets(),
+		SubmissionStatusCount: make(map[string]int),
+		ArtifactStatusCount:   make(map[string]int),
+		GeneratedAt:           time.Now().UTC(),
+	}
+	metricStats := map[string]metricAggregate{}
+	findingStats := map[string]FindingCount{}
+	totalScore := 0
+	for _, experiment := range experiments {
+		experimentSummary, err := s.buildExperimentReportSummary(ctx, experiment.ID, 200)
+		if err != nil {
+			return CourseReportSummary{}, err
+		}
+		summary.Experiments = append(summary.Experiments, experimentSummary)
+		totalScore += experimentSummary.scoreSumBPS
+		summary.SubmissionCount += experimentSummary.SubmissionCount
+		summary.SubmittedCount += experimentSummary.SubmittedCount
+		summary.PublishedReviewCount += experimentSummary.PublishedReviewCount
+		if experimentSummary.PublishedReviewCount > 0 {
+			if summary.MinScoreBPS == 0 || experimentSummary.MinScoreBPS < summary.MinScoreBPS {
+				summary.MinScoreBPS = experimentSummary.MinScoreBPS
+			}
+			if experimentSummary.MaxScoreBPS > summary.MaxScoreBPS {
+				summary.MaxScoreBPS = experimentSummary.MaxScoreBPS
+			}
+		}
+		mergeCountMap(summary.ScoreBuckets, experimentSummary.ScoreBuckets)
+		mergeCountMap(summary.SubmissionStatusCount, experimentSummary.SubmissionStatusCount)
+		mergeCountMap(summary.ArtifactStatusCount, experimentSummary.ArtifactStatusCount)
+		for _, metric := range experimentSummary.MetricAverages {
+			stat := metricStats[metric.MetricCode]
+			stat.metricCode = metric.MetricCode
+			stat.finalScoreSum += metric.AverageScore * metric.Count
+			stat.percentBPSSum += metric.AveragePercentBPS * metric.Count
+			stat.maxScore = metric.MaxScore
+			stat.count += metric.Count
+			metricStats[metric.MetricCode] = stat
+		}
+		for _, finding := range experimentSummary.FindingCounts {
+			key := finding.Category + "|" + string(finding.Severity)
+			entry := findingStats[key]
+			entry.Category = finding.Category
+			entry.Severity = finding.Severity
+			entry.Count += finding.Count
+			findingStats[key] = entry
+		}
+	}
+	if summary.PublishedReviewCount > 0 {
+		summary.AverageScoreBPS = roundedDivide(totalScore, summary.PublishedReviewCount)
+	}
+	summary.MetricAverages = buildMetricAverages(metricStats)
+	summary.FindingCounts = buildFindingCounts(findingStats)
+	return summary, nil
+}
+
+func (s *Service) buildExperimentReportSummary(ctx context.Context, experimentID string, limit int) (ExperimentReportSummary, error) {
 	submissions, err := s.repo.ListSubmissionsForExperiment(ctx, experimentID, clampLimit(limit))
 	if err != nil {
 		return ExperimentReportSummary{}, err
@@ -80,6 +154,7 @@ func (s *Service) GetExperimentReportSummary(ctx context.Context, actor Actor, e
 		}
 		summary.PublishedReviewCount++
 		totalScore += review.Review.TotalScoreBPS
+		summary.scoreSumBPS += review.Review.TotalScoreBPS
 		if summary.PublishedReviewCount == 1 || review.Review.TotalScoreBPS < summary.MinScoreBPS {
 			summary.MinScoreBPS = review.Review.TotalScoreBPS
 		}
@@ -195,6 +270,54 @@ func (s *Service) CreateExperimentSummaryExport(ctx context.Context, actor Actor
 		return s.completeFailedExport(ctx, created, pdfExportDeferredMessage)
 	}
 	payload, extension, err := renderExperimentSummary(summary, format)
+	if err != nil {
+		return s.completeFailedExport(ctx, created, err.Error())
+	}
+	return s.writeAndCompleteExport(ctx, created, extension, payload)
+}
+
+func (s *Service) CreateCourseSummaryExport(ctx context.Context, actor Actor, courseID string, input CreateReportExportInput, audit AuditEntry) (ReportExport, error) {
+	if err := s.ready(); err != nil {
+		return ReportExport{}, err
+	}
+	courseID = strings.TrimSpace(courseID)
+	format, err := normalizeReportFormat(input.Format)
+	if err != nil {
+		return ReportExport{}, err
+	}
+	if !actor.Has(RoleTeacher) && !actor.Has(RoleAdmin) {
+		return ReportExport{}, forbiddenError("teacher or admin role is required")
+	}
+	if len(input.Filters) > 0 && !json.Valid(input.Filters) {
+		return ReportExport{}, validationError("filters must be valid JSON")
+	}
+	summary, err := s.GetCourseReportSummary(ctx, actor, courseID, 200)
+	if err != nil {
+		return ReportExport{}, err
+	}
+	export := ReportExport{
+		ID:          NewID("rpx"),
+		ReportType:  ReportTypeCourseSummary,
+		ScopeType:   ReportScopeCourse,
+		ScopeID:     courseID,
+		Format:      format,
+		Status:      ReportExportStatusQueued,
+		FilterJSON:  mergeExportFilters(input.Filters, map[string]any{"course_id": courseID}),
+		RequestedBy: actor.ID,
+	}
+	audit.Action = "report_export.create"
+	audit.ActorID = actor.ID
+	audit.TargetType = "course"
+	audit.TargetID = courseID
+	audit.Detail = mustJSON(map[string]any{"export_id": export.ID, "format": format, "report_type": export.ReportType})
+	created, err := s.repo.CreateReportExport(ctx, export, audit)
+	if err != nil {
+		return ReportExport{}, err
+	}
+	if format == ReportFormatPDF {
+		return s.completeFailedExport(ctx, created, pdfExportDeferredMessage)
+	}
+	payload, extension, err := renderCourseSummary(summary, format)
 	if err != nil {
 		return s.completeFailedExport(ctx, created, err.Error())
 	}
@@ -344,6 +467,26 @@ func requireReportExportAccess(actor Actor, export ReportExport) error {
 	return nil
 }
 
+func (s *Service) requireTeacherCourseAccess(ctx context.Context, actor Actor, courseID string) error {
+	if courseID == "" {
+		return validationError("course_id is required")
+	}
+	if actor.Has(RoleAdmin) {
+		return nil
+	}
+	if err := actor.Require(RoleTeacher); err != nil {
+		return err
+	}
+	allowed, err := s.repo.TeacherCanEditCourse(ctx, courseID, actor.ID)
+	if err != nil {
+		return err
+	}
+	if !allowed {
+		return forbiddenError("teacher is not assigned to this course")
+	}
+	return nil
+}
+
 func renderSubmissionReport(report SubmissionReport, format ReportFormat) ([]byte, string, error) {
 	switch format {
 	case ReportFormatHTML:
@@ -361,6 +504,17 @@ func renderExperimentSummary(summary ExperimentReportSummary, format ReportForma
 		return []byte(renderExperimentSummaryHTML(summary)), "html", nil
 	case ReportFormatCSV:
 		return renderExperimentSummaryCSV(summary), "csv", nil
+	default:
+		return nil, "", validationError("unsupported report format")
+	}
+}
+
+func renderCourseSummary(summary CourseReportSummary, format ReportFormat) ([]byte, string, error) {
+	switch format {
+	case ReportFormatHTML:
+		return []byte(renderCourseSummaryHTML(summary)), "html", nil
+	case ReportFormatCSV:
+		return renderCourseSummaryCSV(summary), "csv", nil
 	default:
 		return nil, "", validationError("unsupported report format")
 	}
@@ -537,6 +691,109 @@ func renderExperimentSummaryCSV(summary ExperimentReportSummary) []byte {
 	return b.Bytes()
 }
 
+func renderCourseSummaryHTML(summary CourseReportSummary) string {
+	var b strings.Builder
+	b.WriteString("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>Course Summary</title>")
+	b.WriteString(reportStyle())
+	b.WriteString("</head><body><main><header><p>LoongArch Training Evaluation</p><h1>课程统计报表</h1></header><section class=\"summary\">")
+	writeFact(&b, "课程ID", summary.CourseID)
+	writeFact(&b, "实验数", fmt.Sprint(summary.ExperimentCount))
+	writeFact(&b, "提交数", fmt.Sprint(summary.SubmissionCount))
+	writeFact(&b, "已发布评价", fmt.Sprint(summary.PublishedReviewCount))
+	writeFact(&b, "平均分", scorePercent(summary.AverageScoreBPS))
+	writeFact(&b, "最高分", scorePercent(summary.MaxScoreBPS))
+	writeFact(&b, "最低分", scorePercent(summary.MinScoreBPS))
+	b.WriteString("</section><section><h2>实验对比</h2><table><thead><tr><th>实验ID</th><th>提交数</th><th>已提交</th><th>已发布评价</th><th>平均分</th><th>最高分</th><th>最低分</th></tr></thead><tbody>")
+	for _, experiment := range summary.Experiments {
+		b.WriteString("<tr><td>")
+		b.WriteString(html.EscapeString(experiment.ExperimentID))
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, experiment.SubmissionCount)
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, experiment.SubmittedCount)
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, experiment.PublishedReviewCount)
+		b.WriteString("</td><td>")
+		b.WriteString(scorePercent(experiment.AverageScoreBPS))
+		b.WriteString("</td><td>")
+		b.WriteString(scorePercent(experiment.MaxScoreBPS))
+		b.WriteString("</td><td>")
+		b.WriteString(scorePercent(experiment.MinScoreBPS))
+		b.WriteString("</td></tr>")
+	}
+	b.WriteString("</tbody></table></section><section><h2>课程分数分布</h2><table><thead><tr><th>区间</th><th>数量</th></tr></thead><tbody>")
+	for _, label := range scoreBucketOrder() {
+		b.WriteString("<tr><td>")
+		b.WriteString(html.EscapeString(label))
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, summary.ScoreBuckets[label])
+		b.WriteString("</td></tr>")
+	}
+	b.WriteString("</tbody></table></section><section><h2>课程指标均值</h2><table><thead><tr><th>指标</th><th>平均得分</th><th>满分</th><th>平均百分比</th><th>样本数</th></tr></thead><tbody>")
+	for _, metric := range summary.MetricAverages {
+		b.WriteString("<tr><td>")
+		b.WriteString(html.EscapeString(metric.MetricCode))
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, metric.AverageScore)
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, metric.MaxScore)
+		b.WriteString("</td><td>")
+		b.WriteString(scorePercent(metric.AveragePercentBPS))
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, metric.Count)
+		b.WriteString("</td></tr>")
+	}
+	b.WriteString("</tbody></table></section><section><h2>常见问题</h2><table><thead><tr><th>严重度</th><th>类别</th><th>数量</th></tr></thead><tbody>")
+	for _, finding := range summary.FindingCounts {
+		b.WriteString("<tr><td>")
+		b.WriteString(html.EscapeString(string(finding.Severity)))
+		b.WriteString("</td><td>")
+		b.WriteString(html.EscapeString(finding.Category))
+		b.WriteString("</td><td>")
+		fmt.Fprint(&b, finding.Count)
+		b.WriteString("</td></tr>")
+	}
+	b.WriteString("</tbody></table></section></main></body></html>")
+	return b.String()
+}
+
+func renderCourseSummaryCSV(summary CourseReportSummary) []byte {
+	var b bytes.Buffer
+	b.WriteString("\ufeff")
+	writer := csv.NewWriter(&b)
+	writeCSV(writer, []string{"课程统计报表"})
+	writeCSV(writer, []string{"课程ID", summary.CourseID})
+	writeCSV(writer, []string{"实验数", fmt.Sprint(summary.ExperimentCount)})
+	writeCSV(writer, []string{"提交数", fmt.Sprint(summary.SubmissionCount)})
+	writeCSV(writer, []string{"已提交数", fmt.Sprint(summary.SubmittedCount)})
+	writeCSV(writer, []string{"已发布评价", fmt.Sprint(summary.PublishedReviewCount)})
+	writeCSV(writer, []string{"平均分", scorePercent(summary.AverageScoreBPS)})
+	writeCSV(writer, []string{"最高分", scorePercent(summary.MaxScoreBPS)})
+	writeCSV(writer, []string{"最低分", scorePercent(summary.MinScoreBPS)})
+	writeCSV(writer, []string{})
+	writeCSV(writer, []string{"实验ID", "提交数", "已提交数", "已发布评价", "平均分", "最高分", "最低分"})
+	for _, experiment := range summary.Experiments {
+		writeCSV(writer, []string{experiment.ExperimentID, fmt.Sprint(experiment.SubmissionCount), fmt.Sprint(experiment.SubmittedCount), fmt.Sprint(experiment.PublishedReviewCount), scorePercent(experiment.AverageScoreBPS), scorePercent(experiment.MaxScoreBPS), scorePercent(experiment.MinScoreBPS)})
+	}
+	writeCSV(writer, []string{})
+	writeCSV(writer, []string{"课程分数区间", "数量"})
+	for _, label := range scoreBucketOrder() {
+		writeCSV(writer, []string{label, fmt.Sprint(summary.ScoreBuckets[label])})
+	}
+	writeCSV(writer, []string{})
+	writeCSV(writer, []string{"指标", "平均得分", "满分", "平均百分比", "样本数"})
+	for _, metric := range summary.MetricAverages {
+		writeCSV(writer, []string{metric.MetricCode, fmt.Sprint(metric.AverageScore), fmt.Sprint(metric.MaxScore), scorePercent(metric.AveragePercentBPS), fmt.Sprint(metric.Count)})
+	}
+	writeCSV(writer, []string{})
+	writeCSV(writer, []string{"问题严重度", "类别", "数量"})
+	for _, finding := range summary.FindingCounts {
+		writeCSV(writer, []string{string(finding.Severity), finding.Category, fmt.Sprint(finding.Count)})
+	}
+	writer.Flush()
+	return b.Bytes()
+}
+
 func writeCSV(writer *csv.Writer, record []string) {
 	_ = writer.Write(record)
 }
@@ -598,6 +855,12 @@ func buildFindingCounts(stats map[string]FindingCount) []FindingCount {
 		return severityRank(findings[i].Severity) > severityRank(findings[j].Severity)
 	})
 	return findings
+}
+
+func mergeCountMap(dst, src map[string]int) {
+	for key, count := range src {
+		dst[key] += count
+	}
 }
 
 func severityRank(severity FindingSeverity) int {

@@ -151,6 +151,59 @@ func TestGetExperimentReportSummaryAggregatesPublishedReviews(t *testing.T) {
 	}
 }
 
+func TestGetCourseReportSummaryAggregatesExperiments(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeRepo{
+		teacherAllowed:      true,
+		courseExperiments:   []Experiment{{ID: "experiment-1", CourseID: "course-1"}, {ID: "experiment-2", CourseID: "course-1"}},
+		experimentSummaries: validCourseReportDataset(),
+	}
+	service := NewService(repo)
+
+	summary, err := service.GetCourseReportSummary(context.Background(), actor, "course-1", 50)
+	if err != nil {
+		t.Fatalf("course summary should succeed: %v", err)
+	}
+	if summary.ExperimentCount != 2 || summary.SubmissionCount != 3 || summary.PublishedReviewCount != 3 || summary.AverageScoreBPS != 8000 {
+		t.Fatalf("unexpected course summary: %+v", summary)
+	}
+	if summary.ScoreBuckets["70-79%"] != 1 || summary.ScoreBuckets["80-89%"] != 1 || summary.ScoreBuckets["90-100%"] != 1 {
+		t.Fatalf("unexpected course buckets: %+v", summary.ScoreBuckets)
+	}
+	if len(summary.Experiments) != 2 || len(summary.MetricAverages) != 2 {
+		t.Fatalf("unexpected nested summaries: %+v", summary)
+	}
+}
+
+func TestCreateCourseSummaryExportCSVWritesFile(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	repo := &fakeRepo{
+		teacherAllowed:      true,
+		courseExperiments:   []Experiment{{ID: "experiment-1", CourseID: "course-1"}, {ID: "experiment-2", CourseID: "course-1"}},
+		experimentSummaries: validCourseReportDataset(),
+	}
+	service := NewService(repo, WithArtifactStore(testStore{root: dir}))
+
+	export, err := service.CreateCourseSummaryExport(context.Background(), actor, "course-1", CreateReportExportInput{Format: ReportFormatCSV}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("course csv export should succeed: %v", err)
+	}
+	content, err := os.ReadFile(mustResolve(t, testStore{root: dir}, export.StorageKey))
+	if err != nil {
+		t.Fatalf("read export file: %v", err)
+	}
+	if export.ReportType != ReportTypeCourseSummary || export.ScopeType != ReportScopeCourse || !strings.Contains(string(content), "课程统计报表") || !strings.Contains(string(content), "experiment-2") {
+		t.Fatalf("unexpected course export: %+v content=%q", export, string(content[:min(len(content), 96)]))
+	}
+}
+
 func validReportEvaluationContext() EvaluationContext {
 	return EvaluationContext{
 		Submission: Submission{ID: "submission-1", ExperimentID: "experiment-1", StudentID: "student-1", Status: "submitted"},
@@ -197,6 +250,16 @@ func validExperimentReportDataset() map[string]experimentReportItem {
 			evaluation: EvaluationResultDetail{Result: EvaluationResult{ID: "evaluation-2"}, Findings: []RuleCheckFinding{{Category: "parse", Severity: FindingLow, Message: "附件解析失败"}}},
 		},
 	}
+}
+
+func validCourseReportDataset() map[string]experimentReportItem {
+	dataset := validExperimentReportDataset()
+	dataset["submission-3"] = experimentReportItem{
+		detail:     SubmissionDetail{Submission: Submission{ID: "submission-3", ExperimentID: "experiment-2", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindReport}, Extraction: ExtractedContent{Status: "succeeded"}}}},
+		review:     TeacherReviewDetail{Review: TeacherReview{ID: "review-3", SubmissionID: "submission-3", Status: TeacherReviewStatusPublished, TotalScoreBPS: 7000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 7, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 14, MaxScore: 20, WeightBPS: 6000}}},
+		evaluation: EvaluationResultDetail{Result: EvaluationResult{ID: "evaluation-3"}, Findings: []RuleCheckFinding{{Category: "logic", Severity: FindingHigh, Message: "关键结论缺少证据"}}},
+	}
+	return dataset
 }
 
 type testStore struct {

@@ -489,6 +489,36 @@ func (r *PostgresRepository) ExperimentCourseID(ctx context.Context, experimentI
 	return courseID, nil
 }
 
+func (r *PostgresRepository) ListExperimentsForCourse(ctx context.Context, courseID string, limit int) ([]Experiment, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, course_id, title, COALESCE(description, ''), submission_spec, rubric_version_id,
+       status, start_at, due_at, published_at, created_by, created_at, updated_at
+FROM experiments
+WHERE course_id = $1
+ORDER BY created_at DESC, id
+LIMIT $2`, courseID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	experiments := make([]Experiment, 0)
+	for rows.Next() {
+		var experiment Experiment
+		if err := scanExperiment(rows, &experiment); err != nil {
+			return nil, mapDBError(err)
+		}
+		experiments = append(experiments, experiment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return experiments, nil
+}
+
 func (r *PostgresRepository) PublishExperiment(ctx context.Context, experimentID string, audit AuditEntry) (Experiment, error) {
 	pool, err := r.pool()
 	if err != nil {
