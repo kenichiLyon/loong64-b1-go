@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -11,12 +12,15 @@ type Config struct {
 	HTTPAddr                  string
 	AppEnv                    string
 	StorageRoot               string
+	DBDriver                  string
 	DatabaseURL               string
+	SQLitePath                string
 	LLMBaseURL                string
 	LLMModel                  string
 	LLMAPIKey                 string
 	LLMTimeout                time.Duration
 	MigrationsDir             string
+	AutoMigrate               bool
 	DevAuthBypass             bool
 	MaxUploadBytes            int64
 	MaxArtifactsPerSubmission int
@@ -28,16 +32,29 @@ type Config struct {
 
 // Load returns configuration with safe local-development defaults.
 func Load() Config {
+	databaseURL := getenv("DATABASE_URL", "")
+	dbDriver := strings.ToLower(strings.TrimSpace(getenv("DB_DRIVER", "")))
+	if dbDriver == "" {
+		if databaseURL != "" {
+			dbDriver = "postgres"
+		} else {
+			dbDriver = "sqlite"
+		}
+	}
+	autoMigrateDefault := dbDriver == "sqlite"
 	return Config{
 		HTTPAddr:                  getenv("HTTP_ADDR", "127.0.0.1:8080"),
 		AppEnv:                    getenv("APP_ENV", "development"),
 		StorageRoot:               getenv("STORAGE_ROOT", "./storage"),
-		DatabaseURL:               getenv("DATABASE_URL", ""),
+		DBDriver:                  dbDriver,
+		DatabaseURL:               databaseURL,
+		SQLitePath:                getenv("SQLITE_PATH", "./data/loong64-b1-go.db"),
 		LLMBaseURL:                getenv("LLM_BASE_URL", ""),
 		LLMModel:                  getenv("LLM_MODEL", ""),
 		LLMAPIKey:                 getenv("LLM_API_KEY", ""),
 		LLMTimeout:                durationFromEnv("LLM_TIMEOUT", 30*time.Second),
 		MigrationsDir:             getenv("MIGRATIONS_DIR", "migrations"),
+		AutoMigrate:               boolFromEnv("AUTO_MIGRATE", autoMigrateDefault),
 		DevAuthBypass:             boolFromEnv("DEV_AUTH_BYPASS", false),
 		MaxUploadBytes:            int64FromEnv("MAX_UPLOAD_BYTES", 50*1024*1024),
 		MaxArtifactsPerSubmission: intFromEnv("MAX_ARTIFACTS_PER_SUBMISSION", 20),

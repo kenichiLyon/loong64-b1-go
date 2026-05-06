@@ -1,6 +1,6 @@
 # 本地 PostgreSQL 开发脚本
 
-本项目默认使用 PostgreSQL。开发环境可以是 Windows amd64 或 Linux amd64。
+本项目当前默认使用 SQLite；本文件记录需要联调 PostgreSQL 时的本地开发步骤。开发环境可以是 Windows amd64 或 Linux amd64。
 
 ## Windows PowerShell
 
@@ -9,6 +9,7 @@
 ```powershell
 $env:POSTGRES_SUPERUSER_URL='postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable'
 .\scripts\dev\postgres-init.ps1
+$env:DB_DRIVER='postgres'
 $env:DATABASE_URL='postgres://loong64_b1:loong64_b1_dev@127.0.0.1:5432/loong64_b1?sslmode=disable'
 go run ./cmd/migrate up
 go run ./cmd/server
@@ -26,6 +27,7 @@ go run ./cmd/server
 POSTGRES_SUPERUSER_URL='postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable' \
   sh scripts/dev/postgres-init.sh
 
+export DB_DRIVER='postgres'
 export DATABASE_URL='postgres://loong64_b1:loong64_b1_dev@127.0.0.1:5432/loong64_b1?sslmode=disable'
 go run ./cmd/migrate up
 go run ./cmd/server

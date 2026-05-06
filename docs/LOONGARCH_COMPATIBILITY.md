@@ -6,7 +6,7 @@
 - Go 目标：`GOOS=linux GOARCH=loong64 CGO_ENABLED=0`
 - 操作系统：银河麒麟高级服务器版
 - 部署方式：systemd 非容器部署为主，Podman/Docker 为辅
-- 数据库：PostgreSQL
+- 数据库：默认 SQLite，可切换 PostgreSQL
 
 ## 当前策略
 
@@ -21,8 +21,9 @@
 | --- | --- | --- | --- | --- |
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
+| `modernc.org/sqlite` | 默认 SQLite 驱动 | 否 | 中 | 纯 Go，持续验证 `linux/loong64` 构建与 SQLite 迁移/主链路 |
 
-阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。阶段 6 报表使用 Go 标准库生成 HTML/CSV，PDF 在未完成 LoongArch 渲染器与中文字体验证前只记录降级状态。阶段 7 增加部署验证脚本、Nginx 静态托管示例和环境采样流程，仍不引入新的运行时依赖。深度 Word/PDF/OCR 解析和正式 PDF 生成继续列为 LoongArch 高风险能力，后续必须逐项验证。
+阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。阶段 6 报表使用 Go 标准库生成 HTML/CSV，PDF 在未完成 LoongArch 渲染器与中文字体验证前只记录降级状态。阶段 7 增加部署验证脚本、Nginx 静态托管示例和环境采样流程，仍不引入新的运行时依赖。阶段 7.5 已引入纯 Go `modernc.org/sqlite` 作为默认数据库驱动，并通过 SQLite 迁移与最小教学主链路验证。深度 Word/PDF/OCR 解析和正式 PDF 生成继续列为 LoongArch 高风险能力，后续必须逐项验证。
 
 ## 必跑检查
 
@@ -43,6 +44,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 | 能力 | 默认方案 | LoongArch 风险 | 降级策略 |
 | --- | --- | --- | --- |
 | Go API 服务 | 纯 Go 标准库优先 | 低 | 禁用 CGO，目标机 smoke test |
+| 默认数据库 | 纯 Go SQLite | 中 | 保留 PostgreSQL 切换能力 |
 | PostgreSQL | 系统包或官方包 | 中 | 记录安装来源，提供备份恢复脚本 |
 | 成果上传落盘 | 本地 ObjectStore | 低 | 限制大小/数量，保留 SHA-256 和审计 |
 | ZIP/代码包检查 | Go 标准库 `archive/zip` | 低 | 拒绝路径穿越、符号链接和超大解压 |

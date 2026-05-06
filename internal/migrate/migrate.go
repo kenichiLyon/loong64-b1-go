@@ -11,16 +11,23 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 )
 
-const schemaTableSQL = `
+const postgresSchemaTableSQL = `
 CREATE TABLE IF NOT EXISTS schema_migrations (
   version text PRIMARY KEY,
   name text NOT NULL,
   checksum text NOT NULL,
   applied_at timestamptz NOT NULL DEFAULT now()
+);`
+
+const sqliteSchemaTableSQL = `
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version text PRIMARY KEY,
+  name text NOT NULL,
+  checksum text NOT NULL,
+  applied_at text NOT NULL DEFAULT CURRENT_TIMESTAMP
 );`
 
 type Migration struct {
@@ -79,17 +86,38 @@ func LoadDir(dir string) ([]Migration, error) {
 }
 
 func (r *Runner) Up(ctx context.Context) ([]Migration, error) {
-	if r.pool == nil || r.pool.Raw() == nil {
-		return nil, errors.New("postgres pool is not configured")
+	if r.pool == nil {
+		return nil, errors.New("database pool is not configured")
 	}
-	migrations, err := LoadDir(r.dir)
+	migrations, err := LoadDir(r.migrationDir())
 	if err != nil {
 		return nil, err
 	}
-	if _, err := r.pool.Raw().Exec(ctx, schemaTableSQL); err != nil {
+	switch r.pool.Driver() {
+	case database.DriverPostgres:
+		return r.upPostgres(ctx, migrations)
+	case database.DriverSQLite:
+		return r.upSQLite(ctx, migrations)
+	default:
+		return nil, errors.New("unknown database driver")
+	}
+}
+
+func (r *Runner) migrationDir() string {
+	if r.pool != nil && r.pool.Driver() == database.DriverSQLite {
+		return filepath.Join(r.dir, "sqlite")
+	}
+	return r.dir
+}
+
+func (r *Runner) upPostgres(ctx context.Context, migrations []Migration) ([]Migration, error) {
+	if r.pool == nil || r.pool.Raw() == nil {
+		return nil, errors.New("postgres pool is not configured")
+	}
+	if _, err := r.pool.Raw().Exec(ctx, postgresSchemaTableSQL); err != nil {
 		return nil, fmt.Errorf("ensure schema migrations table: %w", err)
 	}
-	applied, err := r.applied(ctx)
+	applied, err := r.appliedPostgres(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +129,7 @@ func (r *Runner) Up(ctx context.Context) ([]Migration, error) {
 			}
 			continue
 		}
-		if err := r.applyOne(ctx, migration); err != nil {
+		if err := r.applyOnePostgres(ctx, migration); err != nil {
 			return nil, err
 		}
 		appliedNow = append(appliedNow, migration)
@@ -109,7 +137,7 @@ func (r *Runner) Up(ctx context.Context) ([]Migration, error) {
 	return appliedNow, nil
 }
 
-func (r *Runner) applied(ctx context.Context) (map[string]string, error) {
+func (r *Runner) appliedPostgres(ctx context.Context) (map[string]string, error) {
 	rows, err := r.pool.Raw().Query(ctx, `SELECT version, checksum FROM schema_migrations`)
 	if err != nil {
 		return nil, fmt.Errorf("query applied migrations: %w", err)
@@ -129,8 +157,8 @@ func (r *Runner) applied(ctx context.Context) (map[string]string, error) {
 	return applied, nil
 }
 
-func (r *Runner) applyOne(ctx context.Context, migration Migration) error {
-	tx, err := r.pool.Raw().BeginTx(ctx, pgx.TxOptions{})
+func (r *Runner) applyOnePostgres(ctx context.Context, migration Migration) error {
+	tx, err := r.pool.Raw().Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("begin migration %s: %w", migration.Version, err)
 	}
@@ -147,6 +175,76 @@ func (r *Runner) applyOne(ctx context.Context, migration Migration) error {
 		return fmt.Errorf("record migration %s: %w", migration.Version, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit migration %s: %w", migration.Version, err)
+	}
+	return nil
+}
+
+func (r *Runner) upSQLite(ctx context.Context, migrations []Migration) ([]Migration, error) {
+	if r.pool == nil || r.pool.SQLDB() == nil {
+		return nil, errors.New("sqlite database is not configured")
+	}
+	if _, err := r.pool.SQLDB().ExecContext(ctx, sqliteSchemaTableSQL); err != nil {
+		return nil, fmt.Errorf("ensure schema migrations table: %w", err)
+	}
+	applied, err := r.appliedSQLite(ctx)
+	if err != nil {
+		return nil, err
+	}
+	appliedNow := make([]Migration, 0)
+	for _, migration := range migrations {
+		if checksum, ok := applied[migration.Version]; ok {
+			if checksum != migration.Checksum {
+				return nil, fmt.Errorf("migration %s checksum changed", migration.Version)
+			}
+			continue
+		}
+		if err := r.applyOneSQLite(ctx, migration); err != nil {
+			return nil, err
+		}
+		appliedNow = append(appliedNow, migration)
+	}
+	return appliedNow, nil
+}
+
+func (r *Runner) appliedSQLite(ctx context.Context) (map[string]string, error) {
+	rows, err := r.pool.SQLDB().QueryContext(ctx, `SELECT version, checksum FROM schema_migrations`)
+	if err != nil {
+		return nil, fmt.Errorf("query applied migrations: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	applied := make(map[string]string)
+	for rows.Next() {
+		var version, checksum string
+		if err := rows.Scan(&version, &checksum); err != nil {
+			return nil, fmt.Errorf("scan migration: %w", err)
+		}
+		applied[version] = checksum
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return applied, nil
+}
+
+func (r *Runner) applyOneSQLite(ctx context.Context, migration Migration) error {
+	tx, err := r.pool.SQLDB().BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin migration %s: %w", migration.Version, err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, migration.SQL); err != nil {
+		return fmt.Errorf("execute migration %s: %w", migration.Version, err)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_migrations (version, name, checksum) VALUES (?, ?, ?)`,
+		migration.Version,
+		migration.Name,
+		migration.Checksum,
+	); err != nil {
+		return fmt.Errorf("record migration %s: %w", migration.Version, err)
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit migration %s: %w", migration.Version, err)
 	}
 	return nil

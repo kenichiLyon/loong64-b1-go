@@ -25,6 +25,10 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if cfg.DBDriver == "" {
+		logger.Error("database driver is not configured")
+		os.Exit(1)
+	}
 	connectCtx, cancel := context.WithTimeout(ctx, cfg.ReadyTimeout)
 	pool, err := database.Open(connectCtx, cfg)
 	cancel()
