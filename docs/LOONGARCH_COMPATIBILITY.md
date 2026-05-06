@@ -22,7 +22,7 @@
 | Go 标准库 | HTTP 服务、配置、日志 | 否 | 低 | 持续交叉编译 |
 | `github.com/jackc/pgx/v5` | PostgreSQL 连接池 | 否 | 低-中 | 固定版本，使用 `CGO_ENABLED=0` 验证 |
 
-阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。阶段 6 报表 MVP 使用 Go 标准库生成 HTML/CSV，PDF 在未完成 LoongArch 渲染器与中文字体验证前只记录降级状态。深度 Word/PDF/OCR 解析和正式 PDF 生成继续列为 LoongArch 高风险能力，后续必须逐项验证。
+阶段 3 成果上传与解析未新增第三方运行时依赖；文件嗅探、SHA-256、ZIP 安全检查、图片元数据和文本摘要均使用 Go 标准库。阶段 4 规则核查与 LLM 初评继续使用 Go 标准库 HTTP/JSON/regexp/crypto 能力和已有 pgx 依赖。阶段 5 教师复核与发布仅新增 SQL/JSON/权限校验逻辑，不引入 CGO、tokenizer、OCR、浏览器驱动或本地模型运行时。阶段 6 报表使用 Go 标准库生成 HTML/CSV，PDF 在未完成 LoongArch 渲染器与中文字体验证前只记录降级状态。阶段 7 增加部署验证脚本、Nginx 静态托管示例和环境采样流程，仍不引入新的运行时依赖。深度 Word/PDF/OCR 解析和正式 PDF 生成继续列为 LoongArch 高风险能力，后续必须逐项验证。
 
 ## 必跑检查
 
@@ -69,7 +69,13 @@ PostgreSQL：<psql --version>
 问题与处理：<notes>
 ```
 
+推荐直接执行：
+
+```bash
+sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
+```
+
 
 ## 前端静态资源
 
-Stage 5.5 前端在开发或 CI 环境中使用 Node/Vite 构建，LoongArch + 银河麒麟目标机默认只托管 `web/dist` 静态产物，不要求目标机安装 Node.js。若必须在目标机重新构建，需要单独验证 Node.js 与 npm 依赖在 LoongArch 上可用。
+Stage 5.5 前端在开发或 CI 环境中使用 Node/Vite 构建，LoongArch + 银河麒麟目标机默认只托管 `web/dist` 静态产物，不要求目标机安装 Node.js。若必须在目标机重新构建，需要单独验证 Node.js 与 npm 依赖在 LoongArch 上可用。Stage 7 默认通过 `deploy/kylin/nginx/loong64-b1-go.conf.example` 提供静态站点与 `/api`、`/health` 反向代理示例。
