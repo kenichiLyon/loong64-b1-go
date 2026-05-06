@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成，下一优先级为阶段 7.5：单二进制运行与默认 SQLite。
+阶段 7 已完成，阶段 7.5 第一段已完成：支持内嵌前端的单二进制构建；默认 SQLite 仍在后续实现。
 
 已包含：
 
@@ -41,6 +41,14 @@ go run ./cmd/server
 ```
 
 默认监听：`http://127.0.0.1:8080`
+
+如果需要构建可直接托管前端页面的完整二进制，先构建前端，再使用 `webui` build tag：
+
+```bash
+npm ci --prefix web
+npm run build --prefix web
+go build -tags webui ./cmd/server
+```
 
 健康检查：
 
@@ -100,7 +108,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 
 ## CI/CD
 
-- Auto Build：每次 push、PR 或手动触发时运行格式检查、Go 测试、Web 构建、linux/amd64 和 linux/loong64 构建，并上传后端二进制与 `loong64-b1-go-web.tar.gz`。
+- Auto Build：每次 push、PR 或手动触发时运行格式检查、Go 测试、Web 构建、linux/amd64 和 linux/loong64 构建，并上传纯后端二进制、内嵌前端的 `*-full` 二进制以及 `loong64-b1-go-web.tar.gz`。
 - Code Quality Review：每次 push、PR 或手动触发时运行 `golangci-lint` 与前端构建；PR 中配置 `SOURCERY_TOKEN` 后自动运行 SourceryAI 代码审核。
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 

@@ -38,10 +38,11 @@
 3. 检查 `gofmt`。
 4. 运行 `go test ./...`。
 5. 使用 Node 24 执行 `npm ci --prefix web` 与 `npm run build --prefix web`。
-6. 构建 `linux/amd64` 和 `linux/loong64` 服务端二进制。
-7. 打包 `web/dist` 为 `loong64-b1-go-web.tar.gz` 静态前端产物。
-8. 生成 `SHA256SUMS`。
-9. 上传名为 `auto-build-<commit sha>` 的 artifact。
+6. 构建 `linux/amd64` 和 `linux/loong64` 纯后端服务端二进制。
+7. 在 `npm run build --prefix web` 后，使用 `-tags webui` 构建 `linux/amd64` 和 `linux/loong64` 的内嵌前端完整二进制，文件名带 `-full`。
+8. 打包 `web/dist` 为 `loong64-b1-go-web.tar.gz` 静态前端产物，保留给 Nginx 或分离部署场景。
+9. 生成 `SHA256SUMS`。
+10. 上传名为 `auto-build-<commit sha>` 的 artifact。
 
 ## CD Publish Artifacts
 
