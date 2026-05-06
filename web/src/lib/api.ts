@@ -1,5 +1,6 @@
 import type {
   ActorProfile,
+  CourseReportSummary,
   ExperimentReportSummary,
   EvaluationResultDetail,
   ReportExport,
@@ -110,6 +111,18 @@ export class APIClient {
 
   async createExperimentSummaryExport(experimentID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
     return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/report-exports`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ format }),
+    });
+  }
+
+  async getCourseReportSummary(courseID: string, options: RequestOptions): Promise<CourseReportSummary> {
+    return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/reports/summary`, options);
+  }
+
+  async createCourseSummaryExport(courseID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+    return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/report-exports`, {
       ...options,
       method: 'POST',
       body: JSON.stringify({ format }),

@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { ExperimentReportSummary, ReportExport, SubmissionReport } from '../lib/types';
+import type { CourseReportSummary, ExperimentReportSummary, ReportExport, SubmissionReport } from '../lib/types';
 
 const props = defineProps<{
   report: SubmissionReport | null;
   summary: ExperimentReportSummary | null;
+  courseSummary: CourseReportSummary | null;
   exportResult: ReportExport | null;
   busy: boolean;
   downloadUrl: string;
@@ -12,8 +13,10 @@ const props = defineProps<{
 const emit = defineEmits<{
   loadReport: [];
   loadSummary: [];
+  loadCourseSummary: [];
   exportSubmission: [format: 'html' | 'csv' | 'pdf'];
   exportSummary: [format: 'html' | 'csv' | 'pdf'];
+  exportCourseSummary: [format: 'html' | 'csv' | 'pdf'];
 }>();
 
 function percent(value: number) {
@@ -34,9 +37,11 @@ function percent(value: number) {
     <div class="button-row report-actions">
       <button :disabled="busy" @click="emit('loadReport')">预览个人报告</button>
       <button :disabled="busy" @click="emit('loadSummary')">实验统计</button>
+      <button :disabled="busy" @click="emit('loadCourseSummary')">课程统计</button>
       <button :disabled="busy" @click="emit('exportSubmission', 'html')">个人 HTML</button>
       <button :disabled="busy" @click="emit('exportSubmission', 'csv')">个人 CSV</button>
       <button :disabled="busy" @click="emit('exportSummary', 'csv')">统计 CSV</button>
+      <button :disabled="busy" @click="emit('exportCourseSummary', 'csv')">课程 CSV</button>
       <button :disabled="busy" @click="emit('exportSubmission', 'pdf')">PDF 降级记录</button>
     </div>
 
@@ -85,6 +90,35 @@ function percent(value: number) {
       <article v-for="metric in summary.metric_averages" :key="metric.metric_code" class="metric-card">
         <span>{{ metric.metric_code }}</span>
         <strong>{{ metric.average_score }}/{{ metric.max_score }} · {{ percent(metric.average_percent_bps) }}</strong>
+      </article>
+    </div>
+
+    <div v-if="courseSummary" class="summary-block">
+      <h3>课程统计 {{ courseSummary.course_id }}</h3>
+      <div class="facts-grid compact-facts">
+        <div>
+          <span>实验数</span>
+          <strong>{{ courseSummary.experiment_count }}</strong>
+        </div>
+        <div>
+          <span>提交数</span>
+          <strong>{{ courseSummary.submission_count }}</strong>
+        </div>
+        <div>
+          <span>已发布评价</span>
+          <strong>{{ courseSummary.published_review_count }}</strong>
+        </div>
+        <div>
+          <span>平均分</span>
+          <strong>{{ percent(courseSummary.average_score_bps) }}</strong>
+        </div>
+      </div>
+      <div class="bucket-row">
+        <span v-for="(count, bucket) in courseSummary.score_buckets" :key="bucket">{{ bucket }} · {{ count }}</span>
+      </div>
+      <article v-for="experiment in courseSummary.experiments" :key="experiment.experiment_id" class="metric-card">
+        <span>{{ experiment.experiment_id }}</span>
+        <strong>{{ percent(experiment.average_score_bps) }} · {{ experiment.published_review_count }}/{{ experiment.submission_count }}</strong>
       </article>
     </div>
 

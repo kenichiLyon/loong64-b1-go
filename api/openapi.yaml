@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.0
+  version: 0.7.1
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -622,6 +622,50 @@ paths:
       operationId: createTeacherExperimentReportExport
       parameters:
         - $ref: '#/components/parameters/ExperimentId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateReportExportRequest'
+      responses:
+        '202':
+          description: 导出任务已记录；HTML/CSV 同步生成，PDF 按 LoongArch 风险策略降级记录。
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportExport'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/courses/{courseId}/reports/summary:
+    get:
+      summary: 教师查看课程跨实验统计报表
+      operationId: getTeacherCourseReportSummary
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 课程跨实验统计报表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CourseReportSummary'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/teacher/courses/{courseId}/report-exports:
+    post:
+      summary: 教师创建课程统计报表导出
+      operationId: createTeacherCourseReportExport
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
       requestBody:
         required: false
         content:
@@ -1515,6 +1559,53 @@ components:
         generated_at:
           type: string
           format: date-time
+    CourseReportSummary:
+      type: object
+      required: [course_id, experiment_count, submission_count, submitted_count, published_review_count, average_score_bps, min_score_bps, max_score_bps, score_buckets, submission_status_count, artifact_status_count, metric_averages, finding_counts, experiments, generated_at]
+      properties:
+        course_id:
+          type: string
+        experiment_count:
+          type: integer
+        submission_count:
+          type: integer
+        submitted_count:
+          type: integer
+        published_review_count:
+          type: integer
+        average_score_bps:
+          type: integer
+        min_score_bps:
+          type: integer
+        max_score_bps:
+          type: integer
+        score_buckets:
+          type: object
+          additionalProperties:
+            type: integer
+        submission_status_count:
+          type: object
+          additionalProperties:
+            type: integer
+        artifact_status_count:
+          type: object
+          additionalProperties:
+            type: integer
+        metric_averages:
+          type: array
+          items:
+            $ref: '#/components/schemas/MetricAverage'
+        finding_counts:
+          type: array
+          items:
+            $ref: '#/components/schemas/FindingCount'
+        experiments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExperimentReportSummary'
+        generated_at:
+          type: string
+          format: date-time
     CreateReportExportRequest:
       type: object
       properties:
@@ -1524,7 +1615,7 @@ components:
           default: html
         filters:
           type: object
-          description: 导出筛选条件快照；服务端会强制写入提交或实验 ID。
+          description: 导出筛选条件快照；服务端会强制写入提交、实验或课程 ID。
     ReportExport:
       type: object
       required: [id, report_type, scope_type, scope_id, format, status, byte_size, filter_json, requested_by, created_at, updated_at]
@@ -1533,10 +1624,10 @@ components:
           type: string
         report_type:
           type: string
-          enum: [submission_report, experiment_summary]
+          enum: [submission_report, experiment_summary, course_summary]
         scope_type:
           type: string
-          enum: [submission, experiment]
+          enum: [submission, experiment, course]
         scope_id:
           type: string
         format:

@@ -29,6 +29,7 @@ type ReportType string
 const (
 	ReportTypeSubmissionReport  ReportType = "submission_report"
 	ReportTypeExperimentSummary ReportType = "experiment_summary"
+	ReportTypeCourseSummary     ReportType = "course_summary"
 )
 
 type ReportScopeType string
@@ -36,6 +37,7 @@ type ReportScopeType string
 const (
 	ReportScopeSubmission ReportScopeType = "submission"
 	ReportScopeExperiment ReportScopeType = "experiment"
+	ReportScopeCourse     ReportScopeType = "course"
 )
 
 type SubmissionReport struct {
@@ -61,6 +63,25 @@ type ExperimentReportSummary struct {
 	MetricAverages        []MetricAverage `json:"metric_averages"`
 	FindingCounts         []FindingCount  `json:"finding_counts"`
 	GeneratedAt           time.Time       `json:"generated_at"`
+	scoreSumBPS           int
+}
+
+type CourseReportSummary struct {
+	CourseID              string                    `json:"course_id"`
+	ExperimentCount       int                       `json:"experiment_count"`
+	SubmissionCount       int                       `json:"submission_count"`
+	SubmittedCount        int                       `json:"submitted_count"`
+	PublishedReviewCount  int                       `json:"published_review_count"`
+	AverageScoreBPS       int                       `json:"average_score_bps"`
+	MinScoreBPS           int                       `json:"min_score_bps"`
+	MaxScoreBPS           int                       `json:"max_score_bps"`
+	ScoreBuckets          map[string]int            `json:"score_buckets"`
+	SubmissionStatusCount map[string]int            `json:"submission_status_count"`
+	ArtifactStatusCount   map[string]int            `json:"artifact_status_count"`
+	MetricAverages        []MetricAverage           `json:"metric_averages"`
+	FindingCounts         []FindingCount            `json:"finding_counts"`
+	Experiments           []ExperimentReportSummary `json:"experiments"`
+	GeneratedAt           time.Time                 `json:"generated_at"`
 }
 
 type MetricAverage struct {

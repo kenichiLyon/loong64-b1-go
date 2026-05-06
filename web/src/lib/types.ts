@@ -156,10 +156,28 @@ export interface ExperimentReportSummary {
   generated_at: string;
 }
 
+export interface CourseReportSummary {
+  course_id: string;
+  experiment_count: number;
+  submission_count: number;
+  submitted_count: number;
+  published_review_count: number;
+  average_score_bps: number;
+  min_score_bps: number;
+  max_score_bps: number;
+  score_buckets: Record<string, number>;
+  submission_status_count: Record<string, number>;
+  artifact_status_count: Record<string, number>;
+  metric_averages: MetricAverage[];
+  finding_counts: FindingCount[];
+  experiments: ExperimentReportSummary[];
+  generated_at: string;
+}
+
 export interface ReportExport {
   id: string;
-  report_type: 'submission_report' | 'experiment_summary';
-  scope_type: 'submission' | 'experiment';
+  report_type: 'submission_report' | 'experiment_summary' | 'course_summary';
+  scope_type: 'submission' | 'experiment' | 'course';
   scope_id: string;
   format: 'html' | 'csv' | 'pdf';
   status: 'queued' | 'running' | 'succeeded' | 'failed';

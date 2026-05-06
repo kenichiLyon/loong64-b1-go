@@ -60,6 +60,8 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/report-exports", h.createSubmissionReportExport)
 	mux.HandleFunc("GET /api/v1/teacher/experiments/{experimentID}/reports/summary", h.getExperimentReportSummary)
 	mux.HandleFunc("POST /api/v1/teacher/experiments/{experimentID}/report-exports", h.createExperimentSummaryExport)
+	mux.HandleFunc("GET /api/v1/teacher/courses/{courseID}/reports/summary", h.getCourseReportSummary)
+	mux.HandleFunc("POST /api/v1/teacher/courses/{courseID}/report-exports", h.createCourseSummaryExport)
 	mux.HandleFunc("GET /api/v1/teacher/report-exports/{exportID}", h.getReportExport)
 	mux.HandleFunc("GET /api/v1/teacher/report-exports/{exportID}/download", h.downloadReportExport)
 }
@@ -539,6 +541,41 @@ func (h *HTTPHandler) createExperimentSummaryExport(w http.ResponseWriter, r *ht
 		}
 	}
 	export, err := h.service.CreateExperimentSummaryExport(r.Context(), actor, r.PathValue("experimentID"), input, h.audit(r))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusAccepted, export)
+}
+
+func (h *HTTPHandler) getCourseReportSummary(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	summary, err := h.service.GetCourseReportSummary(r.Context(), actor, r.PathValue("courseID"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, summary)
+}
+
+func (h *HTTPHandler) createCourseSummaryExport(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input CreateReportExportInput
+	if r.Body != nil && r.ContentLength != 0 {
+		if !h.decode(w, r, &input) {
+			return
+		}
+	}
+	export, err := h.service.CreateCourseSummaryExport(r.Context(), actor, r.PathValue("courseID"), input, h.audit(r))
 	if err != nil {
 		h.writeError(w, err)
 		return

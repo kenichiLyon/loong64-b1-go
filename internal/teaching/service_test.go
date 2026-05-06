@@ -290,6 +290,7 @@ type fakeRepo struct {
 	lastGetTeacherReviewPublishedOnly bool
 	reportExports                     map[string]ReportExport
 	experimentSummaries               map[string]experimentReportItem
+	courseExperiments                 []Experiment
 }
 
 type experimentReportItem struct {
@@ -358,6 +359,9 @@ func (f *fakeRepo) PublishExperiment(_ context.Context, experimentID string, _ A
 func (f *fakeRepo) ExperimentSubmissionAccess(context.Context, string, string) (ExperimentSubmissionAccess, error) {
 	return f.submissionAccess, nil
 }
+func (f *fakeRepo) ListExperimentsForCourse(context.Context, string, int) ([]Experiment, error) {
+	return f.courseExperiments, nil
+}
 func (f *fakeRepo) CreateSubmission(_ context.Context, submission Submission, _ AuditEntry) (Submission, error) {
 	return submission, nil
 }
@@ -377,11 +381,13 @@ func (f *fakeRepo) CreateArtifact(_ context.Context, artifact Artifact, extracti
 	}
 	return result, nil
 }
-func (f *fakeRepo) ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error) {
+func (f *fakeRepo) ListSubmissionsForExperiment(_ context.Context, experimentID string, _ int) ([]Submission, error) {
 	if len(f.experimentSummaries) > 0 {
 		submissions := make([]Submission, 0, len(f.experimentSummaries))
 		for _, item := range f.experimentSummaries {
-			submissions = append(submissions, item.detail.Submission)
+			if item.detail.Submission.ExperimentID == experimentID {
+				submissions = append(submissions, item.detail.Submission)
+			}
 		}
 		return submissions, nil
 	}

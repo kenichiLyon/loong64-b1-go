@@ -6,11 +6,12 @@ import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, EvaluationResultDetail, ExperimentReportSummary, ReportExport, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorRole, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
 const roles = ref<ActorRole[]>(['teacher']);
+const courseID = ref('');
 const experimentID = ref('');
 const submissionID = ref('');
 const artifactKind = ref('report');
@@ -27,6 +28,7 @@ const evaluation = ref<EvaluationResultDetail | null>(null);
 const review = ref<TeacherReviewDetail | null>(null);
 const report = ref<SubmissionReport | null>(null);
 const summary = ref<ExperimentReportSummary | null>(null);
+const courseSummary = ref<CourseReportSummary | null>(null);
 const exportResult = ref<ReportExport | null>(null);
 
 const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
@@ -137,6 +139,12 @@ async function loadExperimentSummary() {
   });
 }
 
+async function loadCourseSummary() {
+  await runAction('读取课程统计', async () => {
+    courseSummary.value = await api.getCourseReportSummary(courseID.value, requestOptions.value);
+  });
+}
+
 async function exportSubmissionReport(format: 'html' | 'csv' | 'pdf') {
   await runAction(`导出个人报告 ${format}`, async () => {
     exportResult.value = await api.createSubmissionReportExport(submissionID.value, format, requestOptions.value);
@@ -146,6 +154,12 @@ async function exportSubmissionReport(format: 'html' | 'csv' | 'pdf') {
 async function exportExperimentSummary(format: 'html' | 'csv' | 'pdf') {
   await runAction(`导出实验统计 ${format}`, async () => {
     exportResult.value = await api.createExperimentSummaryExport(experimentID.value, format, requestOptions.value);
+  });
+}
+
+async function exportCourseSummary(format: 'html' | 'csv' | 'pdf') {
+  await runAction(`导出课程统计 ${format}`, async () => {
+    exportResult.value = await api.createCourseSummaryExport(courseID.value, format, requestOptions.value);
   });
 }
 
@@ -174,6 +188,10 @@ function onFileChange(event: Event) {
       <section class="card flow-card student-flow">
         <p class="eyebrow">学生流程</p>
         <h2>创建提交与上传成果</h2>
+        <label>
+          课程 ID
+          <input v-model="courseID" placeholder="crs_xxx" />
+        </label>
         <label>
           实验 ID
           <input v-model="experimentID" placeholder="exp_xxx" />
@@ -255,12 +273,15 @@ function onFileChange(event: Event) {
 
     <ReportPanel
       :busy="busy"
+      :course-summary="courseSummary"
       :download-url="exportDownloadURL"
       :export-result="exportResult"
       :report="report"
       :summary="summary"
+      @export-course-summary="exportCourseSummary"
       @export-submission="exportSubmissionReport"
       @export-summary="exportExperimentSummary"
+      @load-course-summary="loadCourseSummary"
       @load-report="loadSubmissionReport"
       @load-summary="loadExperimentSummary"
     />
