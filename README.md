@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7：部署验证资产补齐中（Stage 6 课程统计已完成，当前补充麒麟目标机验证脚本、Nginx 示例与运维文档）。
+阶段 7 已完成，下一优先级为阶段 7.5：单二进制运行与默认 SQLite。
 
 已包含：
 
@@ -28,6 +28,7 @@
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `deploy/kylin/nginx`：银河麒麟静态站点与反向代理示例。
+- `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：API 说明，当前版本 0.7.1。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
