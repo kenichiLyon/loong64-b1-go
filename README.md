@@ -30,7 +30,7 @@
 - `deploy/kylin/nginx`：银河麒麟静态站点与反向代理示例。
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.1。
+- `api/openapi.yaml`：API 说明，当前版本 0.7.3。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
