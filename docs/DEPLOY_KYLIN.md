@@ -26,6 +26,7 @@ sha256sum -c SHA256SUMS
 /opt/loong64-b1-go/bin
 /opt/loong64-b1-go/web
 /etc/loong64-b1-go/loong64-b1-go.env
+/etc/loong64-b1-go/runtime.json
 /var/lib/loong64-b1-go/storage
 /var/log/loong64-b1-go
 ```

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.1
+  version: 0.7.2
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -206,6 +206,43 @@ paths:
       responses:
         '204':
           description: 选课关系已保存
+  /api/v1/admin/runtime-config:
+    get:
+      summary: 管理员读取运行时数据库配置
+      operationId: getAdminRuntimeConfig
+      responses:
+        '200':
+          description: 当前生效配置与已保存配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfigSummary'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+    put:
+      summary: 管理员保存运行时数据库配置
+      operationId: updateAdminRuntimeConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRuntimeConfigRequest'
+      responses:
+        '200':
+          description: 配置已保存，需重启生效
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeConfigSummary'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
   /api/v1/teacher/rubric-templates:
     post:
       summary: 教师创建评价模板
@@ -975,6 +1012,54 @@ components:
         status:
           type: string
           enum: [active, dropped]
+    UpdateRuntimeConfigRequest:
+      type: object
+      required: [db_driver]
+      properties:
+        db_driver:
+          type: string
+          enum: [sqlite, postgres]
+        sqlite_path:
+          type: string
+        database_url:
+          type: string
+        auto_migrate:
+          type: boolean
+    RuntimeConfigView:
+      type: object
+      required: [db_driver, database_url_set, auto_migrate]
+      properties:
+        db_driver:
+          type: string
+          enum: [sqlite, postgres]
+        sqlite_path:
+          type: string
+        database_url:
+          type: string
+        database_url_set:
+          type: boolean
+        auto_migrate:
+          type: boolean
+        requires_restart:
+          type: boolean
+        runtime_config_path:
+          type: string
+    RuntimeConfigSummary:
+      type: object
+      required: [path, exists, active]
+      properties:
+        path:
+          type: string
+        exists:
+          type: boolean
+        active:
+          $ref: '#/components/schemas/RuntimeConfigView'
+        stored:
+          $ref: '#/components/schemas/RuntimeConfigView'
+        message:
+          type: string
+        error:
+          type: string
     RubricTemplate:
       type: object
       properties:

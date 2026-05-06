@@ -41,11 +41,14 @@ func NewHandler(deps Dependencies) http.Handler {
 		storage.Checker{Store: deps.Store},
 	)
 	webDist, webEnabled := appembed.Dist()
+	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", rootHandler(webDist, webEnabled))
 	mux.HandleFunc("/health", liveHandler(checks))
 	mux.HandleFunc("/health/live", liveHandler(checks))
 	mux.HandleFunc("/health/ready", readyHandler(checks, deps.Config.ReadyTimeout))
+	mux.HandleFunc("GET /api/v1/admin/runtime-config", runtimeConfigHandler.get)
+	mux.HandleFunc("PUT /api/v1/admin/runtime-config", runtimeConfigHandler.put)
 	options := []teaching.ServiceOption{
 		teaching.WithArtifactStore(deps.Store),
 		teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),

@@ -191,6 +191,25 @@ export interface ReportExport {
   completed_at?: string;
 }
 
+export interface RuntimeConfigView {
+  db_driver: 'sqlite' | 'postgres' | string;
+  sqlite_path?: string;
+  database_url?: string;
+  database_url_set: boolean;
+  auto_migrate: boolean;
+  requires_restart?: boolean;
+  runtime_config_path?: string;
+}
+
+export interface RuntimeConfigSummary {
+  path: string;
+  exists: boolean;
+  active: RuntimeConfigView;
+  stored?: RuntimeConfigView;
+  message?: string;
+  error?: string;
+}
+
 export interface APIErrorBody {
   error?: {
     code?: string;

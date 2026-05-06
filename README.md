@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成，阶段 7.5 前两段已推进：支持内嵌前端的单二进制构建，并已打通默认 SQLite 运行基础。
+阶段 7 已完成，阶段 7.5 已推进到第三段：支持内嵌前端单二进制、默认 SQLite 运行基础，以及管理员通过前端保存数据库运行配置。
 
 已包含：
 
@@ -45,6 +45,7 @@ go run ./cmd/server
 当前默认数据库模式是本地 SQLite：
 
 ```bash
+RUNTIME_CONFIG_PATH=./config/runtime.json
 DB_DRIVER=sqlite
 SQLITE_PATH=./data/loong64-b1-go.db
 AUTO_MIGRATE=true
@@ -66,6 +67,8 @@ curl http://127.0.0.1:8080/health/ready
 ```
 
 `/health/ready` 会检查当前数据库驱动和本地对象存储。默认 SQLite 模式下，只要数据库文件可打开且存储目录可写，`ready` 应返回 `200`。
+
+管理员可通过 PC Web 中的“运行配置”卡片保存 `sqlite / postgres` 数据库模式和连接参数；后端会写入 `runtime.json`，并明确提示需要重启服务生效。
 
 ## 数据库迁移
 
@@ -100,6 +103,7 @@ HTTP_READ_HEADER_TIMEOUT=5s
 HTTP_SHUTDOWN_TIMEOUT=10s
 READY_TIMEOUT=2s
 STORAGE_ROOT=./storage
+RUNTIME_CONFIG_PATH=./config/runtime.json
 MIGRATIONS_DIR=migrations
 DB_DRIVER=sqlite
 SQLITE_PATH=./data/loong64-b1-go.db

@@ -81,14 +81,17 @@
 
 当前实现说明：
 
-- 配置已支持 `DB_DRIVER=sqlite|postgres` 与 `SQLITE_PATH`。
+- 配置已支持 `DB_DRIVER=sqlite|postgres`、`SQLITE_PATH` 和 `RUNTIME_CONFIG_PATH`。
 - SQLite 模式下服务启动默认执行自动迁移，直接运行二进制即可完成本地初始化。
 - `internal/database` 已支持 PostgreSQL / SQLite 双驱动。
 - `cmd/migrate` 已按驱动选择根迁移目录或 `migrations/sqlite`。
 - `internal/teaching` 已接入 `SQLiteRepository`，并通过集成测试覆盖管理员建课、教师建任务、学生建提交最小链路。
-- 运行期“前端切换数据库并持久化配置”的向导尚未实现。
+- 已提供管理员运行配置 API 与 PC Web 面板，可把数据库运行参数写入 `runtime.json`。
+- 完整的首次启动向导、首个管理员创建引导和无请求头初始化页面仍未完成。
 
 ### 阶段 C：首次启动设置向导
+
+状态：已完成首个可用版本
 
 目标：通过前端完成数据库模式选择，而不是要求用户先手工写环境变量。
 

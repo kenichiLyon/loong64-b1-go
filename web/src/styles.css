@@ -320,10 +320,21 @@ label {
 }
 
 .report-panel,
+.runtime-card,
 .published-card {
   margin-top: 18px;
   display: grid;
   gap: 10px;
+}
+
+.runtime-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.runtime-toggle input {
+  width: auto;
 }
 
 .report-actions button {
