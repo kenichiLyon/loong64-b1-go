@@ -19,14 +19,14 @@ import type {
 } from './types';
 
 export interface RequestOptions extends RequestInit {
-  actorID: string;
-  roles: string[];
+  actorID?: string;
+  roles?: string[];
 }
 
 export class APIClient {
   constructor(private readonly baseURL = '') {}
 
-  async me(options: RequestOptions): Promise<ActorProfile> {
+  async me(options: RequestOptions = {}): Promise<ActorProfile> {
     return this.request('/api/v1/me', options);
   }
 
@@ -34,12 +34,25 @@ export class APIClient {
     return this.request('/api/v1/bootstrap/status', { actorID: '', roles: [] });
   }
 
-  async bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string }): Promise<BootstrapCreateAdminResponse> {
+  async bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string; password: string }): Promise<BootstrapCreateAdminResponse> {
     return this.request('/api/v1/bootstrap/admin', {
       actorID: '',
       roles: [],
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  }
+
+  async login(payload: { username: string; password: string }): Promise<ActorProfile> {
+    return this.request('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async logout(): Promise<void> {
+    return this.request('/api/v1/auth/logout', {
+      method: 'POST',
     });
   }
 
@@ -224,8 +237,8 @@ export class APIClient {
     if (options.actorID) {
       headers.set('X-Actor-ID', options.actorID);
     }
-    if (options.roles.length > 0) {
-      headers.set('X-Actor-Roles', options.roles.join(','));
+    if ((options.roles ?? []).length > 0) {
+      headers.set('X-Actor-Roles', (options.roles ?? []).join(','));
     }
     if (options.body && !(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');

@@ -18,6 +18,7 @@ type HTTPDependencies struct {
 	AppEnv        string
 	Logger        *slog.Logger
 	DevAuthBypass bool
+	ResolveActor  func(*http.Request) (Actor, error)
 }
 
 type HTTPHandler struct {
@@ -25,10 +26,11 @@ type HTTPHandler struct {
 	appEnv        string
 	logger        *slog.Logger
 	devAuthBypass bool
+	resolveActor  func(*http.Request) (Actor, error)
 }
 
 func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
-	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger, devAuthBypass: deps.DevAuthBypass}
+	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger, devAuthBypass: deps.DevAuthBypass, resolveActor: deps.ResolveActor}
 	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("GET /api/v1/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/v1/admin/users", h.createUser)
@@ -617,6 +619,9 @@ func (h *HTTPHandler) downloadReportExport(w http.ResponseWriter, r *http.Reques
 }
 
 func (h *HTTPHandler) currentActor(r *http.Request) (Actor, error) {
+	if h.resolveActor != nil {
+		return h.resolveActor(r)
+	}
 	actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
 	roleHeader := strings.TrimSpace(r.Header.Get("X-Actor-Roles"))
 	if actorID == "" && roleHeader == "" && h.devAuthBypass && h.appEnv != "production" && isLocalRequest(r) {

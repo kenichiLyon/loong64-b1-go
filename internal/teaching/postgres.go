@@ -45,10 +45,10 @@ func (r *PostgresRepository) CreateUser(ctx context.Context, user User, roles []
 	}
 	defer rollback(ctx, tx)
 	if err := tx.QueryRow(ctx, `
-INSERT INTO users (id, username, display_name, email, student_no, employee_no, status)
-VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), $7)
+INSERT INTO users (id, username, display_name, email, student_no, employee_no, password_hash, status)
+VALUES ($1, $2, $3, NULLIF($4, ''), NULLIF($5, ''), NULLIF($6, ''), $7, $8)
 RETURNING id, username, display_name, COALESCE(email, ''), COALESCE(student_no, ''), COALESCE(employee_no, ''), status, created_at, updated_at`,
-		user.ID, user.Username, user.DisplayName, user.Email, user.StudentNo, user.EmployeeNo, user.Status,
+		user.ID, user.Username, user.DisplayName, user.Email, user.StudentNo, user.EmployeeNo, user.PasswordHash, user.Status,
 	).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Email, &user.StudentNo, &user.EmployeeNo, &user.Status, &user.CreatedAt, &user.UpdatedAt); err != nil {
 		return User{}, mapDBError(err)
 	}

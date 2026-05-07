@@ -7,7 +7,9 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
@@ -23,6 +25,8 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 		MigrationsDir:     "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		AutoMigrate:       true,
+		SessionCookieName: "test_session",
+		SessionTTL:        24 * time.Hour,
 	}
 	pool, err := database.Open(t.Context(), cfg)
 	if err != nil {
@@ -33,7 +37,8 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 		t.Fatalf("migrate: %v", err)
 	}
 	service := teaching.NewService(teaching.NewSQLiteRepository(pool))
-	handler := newBootstrapHandler(service, cfg, nil)
+	authService := authn.NewService(authn.NewSQLiteRepository(pool), cfg)
+	handler := newBootstrapHandler(service, cfg, nil, authService)
 
 	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap/status", nil)
 	statusRec := httptest.NewRecorder()
@@ -42,7 +47,7 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 		t.Fatalf("status code: %d body=%s", statusRec.Code, statusRec.Body.String())
 	}
 
-	body := bytes.NewBufferString(`{"username":"admin1","display_name":"Admin One","employee_no":"A001"}`)
+	body := bytes.NewBufferString(`{"username":"admin1","display_name":"Admin One","employee_no":"A001","password":"test-pass"}`)
 	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/bootstrap/admin", body)
 	createRec := httptest.NewRecorder()
 	handler.createAdmin(createRec, createReq)
@@ -59,5 +64,8 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 	}
 	if created.User.ID == "" {
 		t.Fatalf("missing created user id: %+v", created)
+	}
+	if len(createRec.Result().Cookies()) == 0 {
+		t.Fatal("expected session cookie after bootstrap")
 	}
 }

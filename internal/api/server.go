@@ -14,6 +14,7 @@ import (
 
 	appembed "github.com/kenichiLyon/loong64-b1-go"
 	"github.com/kenichiLyon/loong64-b1-go/internal/assistant"
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/health"
@@ -63,6 +64,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	}
 	var teachingService *teaching.Service
 	var assistantService *assistant.Service
+	var authService *authn.Service
 	if deps.DB != nil {
 		switch {
 		case deps.DB.IsPostgres():
@@ -70,20 +72,25 @@ func NewHandler(deps Dependencies) http.Handler {
 			teachingService = teaching.NewService(repo, options...)
 			assistantRepo := assistant.NewPostgresRepository(deps.DB)
 			assistantService = assistant.NewService(assistantRepo, teachingService, nil, deps.Config, logger, deps.DB, llmGateway)
+			authService = authn.NewService(authn.NewPostgresRepository(deps.DB), deps.Config)
 		case deps.DB.IsSQLite():
 			repo := teaching.NewSQLiteRepository(deps.DB)
 			teachingService = teaching.NewService(repo, options...)
 			assistantRepo := assistant.NewSQLiteRepository(deps.DB)
 			assistantService = assistant.NewService(assistantRepo, teachingService, nil, deps.Config, logger, deps.DB, llmGateway)
+			authService = authn.NewService(authn.NewSQLiteRepository(deps.DB), deps.Config)
 		}
 	}
 	if teachingService == nil {
 		teachingService = teaching.NewService(nil, options...)
 	}
-	bootstrapHandler := newBootstrapHandler(teachingService, deps.Config, logger)
-	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass)
+	authHandler := newAuthHandler(authService, deps.Config, logger, deps.Config.DevAuthBypass)
+	bootstrapHandler := newBootstrapHandler(teachingService, deps.Config, logger, authService)
+	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass, authService)
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.logout)
 	if assistantService != nil {
-		deploymentAssistantHandler := newDeploymentAssistantHandler(assistantService, teachingService, deps.Config, logger, deps.Config.DevAuthBypass)
+		deploymentAssistantHandler := newDeploymentAssistantHandler(assistantService, teachingService, deps.Config, logger, deps.Config.DevAuthBypass, authService)
 		mux.HandleFunc("POST /api/v1/bootstrap/assistant/conversations", deploymentAssistantHandler.createBootstrapConversation)
 		mux.HandleFunc("GET /api/v1/bootstrap/assistant/conversations/{conversationID}", deploymentAssistantHandler.getBootstrapConversation)
 		mux.HandleFunc("POST /api/v1/bootstrap/assistant/conversations/{conversationID}/messages", deploymentAssistantHandler.sendBootstrapMessage)
@@ -102,6 +109,7 @@ func NewHandler(deps Dependencies) http.Handler {
 		AppEnv:        deps.Config.AppEnv,
 		Logger:        logger,
 		DevAuthBypass: deps.Config.DevAuthBypass,
+		ResolveActor:  authHandler.resolveActor,
 	})
 	return httpx.Chain(mux, httpx.Recover(logger), httpx.RequestID, httpx.AccessLog(logger))
 }

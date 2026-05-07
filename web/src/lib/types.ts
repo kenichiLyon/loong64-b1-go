@@ -3,6 +3,8 @@ export type ActorRole = 'admin' | 'teacher' | 'student';
 export interface ActorProfile {
   id: string;
   roles: ActorRole[];
+  username?: string;
+  display_name?: string;
 }
 
 export interface Submission {

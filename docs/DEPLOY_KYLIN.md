@@ -72,6 +72,7 @@ sudo chown -R loong64b1:loong64b1 /opt/loong64-b1-go/web
 编辑 `/etc/loong64-b1-go/loong64-b1-go.env`，至少修改：
 
 - `DB_DRIVER`
+- `SESSION_SECURE_COOKIE`
 - `LLM_BASE_URL`
 - `LLM_MODEL`
 - `LLM_API_KEY`，如使用需要鉴权的模型网关
@@ -88,6 +89,14 @@ PostgreSQL 示例：
 ```env
 DB_DRIVER=postgres
 DATABASE_URL=postgres://loong64_b1:CHANGE_ME@127.0.0.1:5432/loong64_b1?sslmode=disable
+```
+
+认证 cookie 建议：
+
+```env
+SESSION_COOKIE_NAME=loong64_b1_session
+SESSION_TTL=168h
+SESSION_SECURE_COOKIE=true
 ```
 
 本地模型示例：

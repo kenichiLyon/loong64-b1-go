@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.5
+  version: 0.7.6
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -58,6 +58,34 @@ paths:
                 $ref: '#/components/schemas/Actor'
         '401':
           $ref: '#/components/responses/Error'
+  /api/v1/auth/login:
+    post:
+      summary: 用户登录
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功并写入 session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actor'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/auth/logout:
+    post:
+      summary: 用户退出登录
+      operationId: logout
+      responses:
+        '204':
+          description: 会话已清除
   /api/v1/bootstrap/status:
     get:
       summary: 读取首次启动状态
@@ -1083,10 +1111,22 @@ components:
       properties:
         id:
           type: string
+        username:
+          type: string
+        display_name:
+          type: string
         roles:
           type: array
           items:
             $ref: '#/components/schemas/Role'
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
     Role:
       type: string
       enum: [admin, teacher, student]
@@ -1278,7 +1318,7 @@ components:
           type: string
     BootstrapCreateAdminRequest:
       type: object
-      required: [username, display_name]
+      required: [username, display_name, password]
       properties:
         username:
           type: string
@@ -1287,6 +1327,8 @@ components:
         email:
           type: string
         employee_no:
+          type: string
+        password:
           type: string
     BootstrapCreateAdminResponse:
       type: object

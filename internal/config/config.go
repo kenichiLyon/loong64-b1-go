@@ -27,6 +27,9 @@ type Config struct {
 	MigrationsDir             string
 	AutoMigrate               bool
 	DevAuthBypass             bool
+	SessionCookieName         string
+	SessionTTL                time.Duration
+	SessionSecureCookie       bool
 	MaxUploadBytes            int64
 	MaxArtifactsPerSubmission int
 	DBMaxConns                int32
@@ -87,6 +90,9 @@ func Load() Config {
 		MigrationsDir:             getenv("MIGRATIONS_DIR", "migrations"),
 		AutoMigrate:               autoMigrate,
 		DevAuthBypass:             boolFromEnv("DEV_AUTH_BYPASS", false),
+		SessionCookieName:         getenv("SESSION_COOKIE_NAME", "loong64_b1_session"),
+		SessionTTL:                durationFromEnv("SESSION_TTL", 168*time.Hour),
+		SessionSecureCookie:       boolFromEnv("SESSION_SECURE_COOKIE", getenv("APP_ENV", "development") == "production"),
 		MaxUploadBytes:            int64FromEnv("MAX_UPLOAD_BYTES", 50*1024*1024),
 		MaxArtifactsPerSubmission: intFromEnv("MAX_ARTIFACTS_PER_SUBMISSION", 20),
 		DBMaxConns:                int32FromEnv("DB_MAX_CONNS", 10),

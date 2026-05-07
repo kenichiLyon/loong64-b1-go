@@ -6,20 +6,23 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
 	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
 
 type User struct {
-	ID          string    `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email,omitempty"`
-	StudentNo   string    `json:"student_no,omitempty"`
-	EmployeeNo  string    `json:"employee_no,omitempty"`
-	Status      string    `json:"status"`
-	Roles       []Role    `json:"roles"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Username     string    `json:"username"`
+	DisplayName  string    `json:"display_name"`
+	Email        string    `json:"email,omitempty"`
+	StudentNo    string    `json:"student_no,omitempty"`
+	EmployeeNo   string    `json:"employee_no,omitempty"`
+	PasswordHash string    `json:"-"`
+	Status       string    `json:"status"`
+	Roles        []Role    `json:"roles"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type Class struct {
@@ -225,6 +228,7 @@ type CreateUserInput struct {
 	Email       string   `json:"email,omitempty"`
 	StudentNo   string   `json:"student_no,omitempty"`
 	EmployeeNo  string   `json:"employee_no,omitempty"`
+	Password    string   `json:"password,omitempty"`
 	Status      string   `json:"status,omitempty"`
 	Roles       []string `json:"roles"`
 }
@@ -239,6 +243,7 @@ type BootstrapCreateAdminInput struct {
 	DisplayName string `json:"display_name"`
 	Email       string `json:"email,omitempty"`
 	EmployeeNo  string `json:"employee_no,omitempty"`
+	Password    string `json:"password"`
 }
 
 func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserInput, audit AuditEntry) (User, error) {
@@ -263,6 +268,13 @@ func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserI
 	}
 	if err := validateUser(user); err != nil {
 		return User{}, err
+	}
+	if strings.TrimSpace(input.Password) != "" {
+		passwordHash, err := hashPassword(input.Password)
+		if err != nil {
+			return User{}, unavailableError("failed to hash password", err)
+		}
+		user.PasswordHash = passwordHash
 	}
 	audit.Action = "user.create"
 	audit.ActorID = actor.ID
@@ -314,6 +326,14 @@ func (s *Service) BootstrapCreateAdmin(ctx context.Context, input BootstrapCreat
 	if err := validateUser(user); err != nil {
 		return User{}, err
 	}
+	if strings.TrimSpace(input.Password) == "" {
+		return User{}, validationError("password is required")
+	}
+	passwordHash, err := hashPassword(input.Password)
+	if err != nil {
+		return User{}, unavailableError("failed to hash password", err)
+	}
+	user.PasswordHash = passwordHash
 	audit.Action = "bootstrap.create_admin"
 	audit.ActorID = "bootstrap"
 	audit.TargetType = "user"
@@ -730,4 +750,16 @@ func clampLimit(limit int) int {
 		return 200
 	}
 	return limit
+}
+
+func hashPassword(password string) (string, error) {
+	password = strings.TrimSpace(password)
+	if password == "" {
+		return "", validationError("password is required")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
 }

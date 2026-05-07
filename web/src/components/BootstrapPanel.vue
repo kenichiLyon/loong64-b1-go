@@ -8,7 +8,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  createAdmin: [payload: { username: string; display_name: string; email?: string; employee_no?: string }];
+  createAdmin: [payload: { username: string; display_name: string; email?: string; employee_no?: string; password: string }];
 }>();
 
 const form = reactive({
@@ -16,6 +16,7 @@ const form = reactive({
   display_name: 'Bootstrap Admin',
   email: '',
   employee_no: 'A001',
+  password: '',
 });
 
 function submit() {
@@ -24,6 +25,7 @@ function submit() {
     display_name: form.display_name,
     email: form.email || undefined,
     employee_no: form.employee_no || undefined,
+    password: form.password,
   });
 }
 </script>
@@ -75,9 +77,13 @@ function submit() {
       邮箱（可选）
       <input v-model="form.email" placeholder="admin@example.edu" />
     </label>
+    <label>
+      密码
+      <input v-model="form.password" type="password" placeholder="至少一位" />
+    </label>
 
     <div class="button-row">
-      <button :disabled="busy" @click="submit">创建首个管理员</button>
+      <button :disabled="busy || !form.password.trim()" @click="submit">创建首个管理员</button>
     </div>
 
     <p class="muted">数据库切换仍通过“运行配置”写入 `runtime.json`，保存后需重启。当前引导只负责当前数据库中的首个管理员初始化。</p>

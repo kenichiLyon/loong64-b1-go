@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
-import ActorSwitcher from './components/ActorSwitcher.vue';
 import BootstrapPanel from './components/BootstrapPanel.vue';
 import DeploymentAssistantPanel from './components/DeploymentAssistantPanel.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
+import LoginPanel from './components/LoginPanel.vue';
 import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
@@ -37,8 +37,9 @@ const runtimeConfig = ref<RuntimeConfigSummary | null>(null);
 const bootstrapStatus = ref<BootstrapStatus | null>(null);
 const bootstrapAssistant = ref<AssistantConversationDetail | null>(null);
 const deploymentAssistant = ref<AssistantConversationDetail | null>(null);
+const loggedIn = ref(false);
 
-const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
+const requestOptions = computed(() => ({}));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
 const mode = reactive({ evaluation: 'rule_only' as 'rule_only' | 'rule_and_llm' });
 
@@ -68,6 +69,19 @@ async function loadBootstrapStatus() {
     bootstrapStatus.value = await api.getBootstrapStatus();
   } catch (error) {
     message.value = error instanceof Error ? error.message : String(error);
+  }
+}
+
+async function loadCurrentUser() {
+  try {
+    const me = await api.me();
+    actorID.value = me.id;
+    roles.value = me.roles;
+    loggedIn.value = true;
+  } catch {
+    loggedIn.value = false;
+    actorID.value = '';
+    roles.value = [];
   }
 }
 
@@ -106,11 +120,7 @@ async function confirmBootstrapAssistantTool(toolCall: AssistantToolCall, inputs
     }
     await loadBootstrapStatus();
     if (toolCall.tool_name === 'bootstrap_create_admin') {
-      const userID = String((result.tool_call.response_json as Record<string, unknown>).user_id || '');
-      if (userID) {
-        actorID.value = userID;
-        roles.value = ['admin'];
-      }
+      await loadCurrentUser();
     }
   });
 }
@@ -255,13 +265,35 @@ async function confirmDeploymentAssistantTool(toolCall: AssistantToolCall, input
   });
 }
 
-async function bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string }) {
+async function bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string; password: string }) {
   await runAction('初始化管理员', async () => {
     const response = await api.bootstrapCreateAdmin(payload);
     actorID.value = response.user.id;
     roles.value = ['admin'];
+    loggedIn.value = true;
     await loadBootstrapStatus();
     await loadRuntimeConfig();
+  });
+}
+
+async function login(payload: { username: string; password: string }) {
+  await runAction('登录', async () => {
+    const me = await api.login(payload);
+    actorID.value = me.id;
+    roles.value = me.roles;
+    loggedIn.value = true;
+    await loadRuntimeConfig();
+  });
+}
+
+async function logout() {
+  await runAction('退出登录', async () => {
+    await api.logout();
+    loggedIn.value = false;
+    actorID.value = '';
+    roles.value = [];
+    runtimeConfig.value = null;
+    deploymentAssistant.value = null;
   });
 }
 
@@ -270,7 +302,12 @@ function onFileChange(event: Event) {
 }
 
 onMounted(() => {
-  void loadBootstrapStatus();
+  void (async () => {
+    await loadBootstrapStatus();
+    if (bootstrapStatus.value?.initialized) {
+      await loadCurrentUser();
+    }
+  })();
 });
 </script>
 
@@ -307,10 +344,24 @@ onMounted(() => {
       @send="sendBootstrapAssistantMessage"
     />
 
-    <ActorSwitcher v-else v-model:actor-id="actorID" v-model:roles="roles" />
+    <LoginPanel v-else-if="bootstrapStatus?.initialized && !loggedIn" :busy="busy" @login="login" />
+
+    <section v-else class="card identity-card">
+      <div>
+        <p class="eyebrow">当前会话</p>
+        <h2>{{ actorID }}</h2>
+      </div>
+      <label>
+        角色
+        <input :value="roles.join(', ')" readonly />
+      </label>
+      <div class="button-row">
+        <button :disabled="busy" @click="logout">退出登录</button>
+      </div>
+    </section>
 
     <RuntimeConfigPanel
-      v-if="bootstrapStatus?.initialized && roles.includes('admin')"
+      v-if="bootstrapStatus?.initialized && loggedIn && roles.includes('admin')"
       :busy="busy"
       :summary="runtimeConfig"
       @load="loadRuntimeConfig"
@@ -318,7 +369,7 @@ onMounted(() => {
     />
 
     <DeploymentAssistantPanel
-      v-if="bootstrapStatus?.initialized && roles.includes('admin')"
+      v-if="bootstrapStatus?.initialized && loggedIn && roles.includes('admin')"
       :bootstrap-status="bootstrapStatus"
       :busy="busy"
       :detail="deploymentAssistant"
@@ -329,7 +380,7 @@ onMounted(() => {
       @send="sendDeploymentAssistantMessage"
     />
 
-    <section v-if="bootstrapStatus?.initialized !== false" class="workspace-grid">
+    <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="workspace-grid">
       <section class="card flow-card student-flow">
         <p class="eyebrow">学生流程</p>
         <h2>创建提交与上传成果</h2>
@@ -410,14 +461,14 @@ onMounted(() => {
       </section>
     </section>
 
-    <section v-if="bootstrapStatus?.initialized !== false" class="dashboard-grid">
+    <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="dashboard-grid">
       <SubmissionDetailPanel :detail="detail" :review="review" />
       <EvaluationPanel :evaluation="evaluation" />
       <ReviewPanel :busy="busy" :evaluation="evaluation" :review="review" @save="saveReview" @publish="publishReview" />
     </section>
 
     <ReportPanel
-      v-if="bootstrapStatus?.initialized !== false"
+      v-if="bootstrapStatus?.initialized !== false && loggedIn"
       :busy="busy"
       :course-summary="courseSummary"
       :download-url="exportDownloadURL"
@@ -432,7 +483,7 @@ onMounted(() => {
       @load-summary="loadExperimentSummary"
     />
 
-    <section v-if="bootstrapStatus?.initialized !== false" class="card published-card">
+    <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="card published-card">
       <p class="eyebrow">学生查看发布结果</p>
       <h2>发布后反馈</h2>
       <p>切换为学生角色并输入自己的提交 ID 后，可读取教师发布的最终评价。</p>
