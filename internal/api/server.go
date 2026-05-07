@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appembed "github.com/kenichiLyon/loong64-b1-go"
+	"github.com/kenichiLyon/loong64-b1-go/internal/assistant"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/health"
@@ -50,23 +51,30 @@ func NewHandler(deps Dependencies) http.Handler {
 		teaching.WithArtifactStore(deps.Store),
 		teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
 	}
+	var llmGateway *llm.Gateway
 	if deps.Config.LLMBaseURL != "" {
-		llmGateway, err := llm.NewOpenAICompatible(llm.Config{BaseURL: deps.Config.LLMBaseURL, Model: deps.Config.LLMModel, APIKey: deps.Config.LLMAPIKey, Timeout: deps.Config.LLMTimeout})
+		createdGateway, err := llm.NewOpenAICompatible(llm.Config{BaseURL: deps.Config.LLMBaseURL, Model: deps.Config.LLMModel, APIKey: deps.Config.LLMAPIKey, Timeout: deps.Config.LLMTimeout})
 		if err != nil {
 			logger.Warn("llm gateway configuration is invalid; llm evaluation will be unavailable", "error", err)
 		} else {
+			llmGateway = createdGateway
 			options = append(options, teaching.WithLLMClient(llmGateway))
 		}
 	}
 	var teachingService *teaching.Service
+	var assistantService *assistant.Service
 	if deps.DB != nil {
 		switch {
 		case deps.DB.IsPostgres():
 			repo := teaching.NewPostgresRepository(deps.DB)
 			teachingService = teaching.NewService(repo, options...)
+			assistantRepo := assistant.NewPostgresRepository(deps.DB)
+			assistantService = assistant.NewService(assistantRepo, teachingService, nil, deps.Config, logger, deps.DB, llmGateway)
 		case deps.DB.IsSQLite():
 			repo := teaching.NewSQLiteRepository(deps.DB)
 			teachingService = teaching.NewService(repo, options...)
+			assistantRepo := assistant.NewSQLiteRepository(deps.DB)
+			assistantService = assistant.NewService(assistantRepo, teachingService, nil, deps.Config, logger, deps.DB, llmGateway)
 		}
 	}
 	if teachingService == nil {
@@ -74,6 +82,17 @@ func NewHandler(deps Dependencies) http.Handler {
 	}
 	bootstrapHandler := newBootstrapHandler(teachingService, deps.Config, logger)
 	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass)
+	if assistantService != nil {
+		deploymentAssistantHandler := newDeploymentAssistantHandler(assistantService, teachingService, deps.Config, logger, deps.Config.DevAuthBypass)
+		mux.HandleFunc("POST /api/v1/bootstrap/assistant/conversations", deploymentAssistantHandler.createBootstrapConversation)
+		mux.HandleFunc("GET /api/v1/bootstrap/assistant/conversations/{conversationID}", deploymentAssistantHandler.getBootstrapConversation)
+		mux.HandleFunc("POST /api/v1/bootstrap/assistant/conversations/{conversationID}/messages", deploymentAssistantHandler.sendBootstrapMessage)
+		mux.HandleFunc("POST /api/v1/bootstrap/assistant/tool-calls/{toolCallID}/confirm", deploymentAssistantHandler.confirmBootstrapToolCall)
+		mux.HandleFunc("POST /api/v1/admin/deployment-assistant/conversations", deploymentAssistantHandler.createAdminConversation)
+		mux.HandleFunc("GET /api/v1/admin/deployment-assistant/conversations/{conversationID}", deploymentAssistantHandler.getAdminConversation)
+		mux.HandleFunc("POST /api/v1/admin/deployment-assistant/conversations/{conversationID}/messages", deploymentAssistantHandler.sendAdminMessage)
+		mux.HandleFunc("POST /api/v1/admin/deployment-assistant/tool-calls/{toolCallID}/confirm", deploymentAssistantHandler.confirmAdminToolCall)
+	}
 	mux.HandleFunc("GET /api/v1/bootstrap/status", bootstrapHandler.status)
 	mux.HandleFunc("POST /api/v1/bootstrap/admin", bootstrapHandler.createAdmin)
 	mux.HandleFunc("GET /api/v1/admin/runtime-config", runtimeConfigHandler.get)

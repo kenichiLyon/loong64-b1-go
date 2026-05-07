@@ -226,6 +226,78 @@ export interface BootstrapCreateAdminResponse {
   message: string;
 }
 
+export interface AssistantConversation {
+  id: string;
+  scope_type: 'bootstrap' | 'deployment_admin';
+  actor_id?: string;
+  status: 'active' | 'closed';
+  model?: string;
+  prompt_version: string;
+  summary_text?: string;
+  created_at: string;
+  updated_at: string;
+  last_message_at: string;
+}
+
+export interface AssistantContextSnapshot {
+  id: string;
+  conversation_id: string;
+  scope_stage: 'bootstrap_status' | 'runtime_config' | 'db_connectivity' | 'admin_init';
+  payload_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface AssistantToolCall {
+  id: string;
+  conversation_id: string;
+  tool_name:
+    | 'inspect_bootstrap_status'
+    | 'inspect_runtime_config'
+    | 'test_sqlite_path'
+    | 'test_postgres_connection'
+    | 'save_runtime_config'
+    | 'bootstrap_create_admin';
+  status: 'pending_confirmation' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  request_json: Record<string, unknown>;
+  response_json: Record<string, unknown>;
+  error?: string;
+  confirmed_by_actor?: string;
+  created_at: string;
+  completed_at?: string;
+}
+
+export interface AssistantMessage {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'tool';
+  content_text: string;
+  context_snapshot_id?: string;
+  tool_call_id?: string;
+  created_at: string;
+}
+
+export interface AssistantConversationDetail {
+  conversation: AssistantConversation;
+  messages: AssistantMessage[];
+  pending_tool_call?: AssistantToolCall;
+  latest_context_snapshot?: AssistantContextSnapshot;
+}
+
+export interface AssistantSendMessageResult {
+  conversation: AssistantConversation;
+  assistant_message: AssistantMessage;
+  pending_tool_call?: AssistantToolCall;
+  context_snapshot: AssistantContextSnapshot;
+  requires_confirmation: boolean;
+}
+
+export interface AssistantConfirmToolResult {
+  conversation: AssistantConversation;
+  tool_call: AssistantToolCall;
+  tool_message: AssistantMessage;
+  assistant_message: AssistantMessage;
+}
+
 export interface APIErrorBody {
   error?: {
     code?: string;
