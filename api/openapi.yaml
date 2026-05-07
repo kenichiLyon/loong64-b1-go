@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.3
+  version: 0.7.4
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -57,6 +57,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Actor'
         '401':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/status:
+    get:
+      summary: 读取首次启动状态
+      operationId: getBootstrapStatus
+      responses:
+        '200':
+          description: 当前是否已初始化以及当前运行数据库信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapStatusResponse'
+        '503':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/admin:
+    post:
+      summary: 创建首个管理员
+      operationId: bootstrapCreateAdmin
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapCreateAdminRequest'
+      responses:
+        '201':
+          description: 首个管理员已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapCreateAdminResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '409':
           $ref: '#/components/responses/Error'
   /api/v1/admin/users:
     get:
@@ -1059,6 +1093,40 @@ components:
         message:
           type: string
         error:
+          type: string
+    BootstrapCreateAdminRequest:
+      type: object
+      required: [username, display_name]
+      properties:
+        username:
+          type: string
+        display_name:
+          type: string
+        email:
+          type: string
+        employee_no:
+          type: string
+    BootstrapCreateAdminResponse:
+      type: object
+      required: [user, message]
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        message:
+          type: string
+    BootstrapStatusResponse:
+      type: object
+      required: [initialized, user_count, runtime]
+      properties:
+        initialized:
+          type: boolean
+        user_count:
+          type: integer
+        runtime:
+          $ref: '#/components/schemas/RuntimeConfigView'
+        stored:
+          $ref: '#/components/schemas/RuntimeConfigView'
+        message:
           type: string
     RubricTemplate:
       type: object

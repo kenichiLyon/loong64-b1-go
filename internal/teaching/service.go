@@ -130,6 +130,7 @@ type AuditEntry struct {
 
 type Repository interface {
 	CreateUser(context.Context, User, []Role, AuditEntry) (User, error)
+	CountUsers(context.Context) (int, error)
 	ListUsers(context.Context, int) ([]User, error)
 	SetUserRoles(context.Context, string, []Role, AuditEntry) error
 	UserHasRole(context.Context, string, Role) (bool, error)
@@ -228,6 +229,18 @@ type CreateUserInput struct {
 	Roles       []string `json:"roles"`
 }
 
+type BootstrapStatus struct {
+	Initialized bool `json:"initialized"`
+	UserCount   int  `json:"user_count"`
+}
+
+type BootstrapCreateAdminInput struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+	Email       string `json:"email,omitempty"`
+	EmployeeNo  string `json:"employee_no,omitempty"`
+}
+
 func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserInput, audit AuditEntry) (User, error) {
 	if err := s.ready(); err != nil {
 		return User{}, err
@@ -266,6 +279,46 @@ func (s *Service) ListUsers(ctx context.Context, actor Actor, limit int) ([]User
 		return nil, err
 	}
 	return s.repo.ListUsers(ctx, clampLimit(limit))
+}
+
+func (s *Service) GetBootstrapStatus(ctx context.Context) (BootstrapStatus, error) {
+	if err := s.ready(); err != nil {
+		return BootstrapStatus{}, err
+	}
+	count, err := s.repo.CountUsers(ctx)
+	if err != nil {
+		return BootstrapStatus{}, err
+	}
+	return BootstrapStatus{Initialized: count > 0, UserCount: count}, nil
+}
+
+func (s *Service) BootstrapCreateAdmin(ctx context.Context, input BootstrapCreateAdminInput, audit AuditEntry) (User, error) {
+	if err := s.ready(); err != nil {
+		return User{}, err
+	}
+	count, err := s.repo.CountUsers(ctx)
+	if err != nil {
+		return User{}, err
+	}
+	if count > 0 {
+		return User{}, conflictError("bootstrap has already been completed")
+	}
+	user := User{
+		ID:          NewID("usr"),
+		Username:    strings.TrimSpace(input.Username),
+		DisplayName: strings.TrimSpace(input.DisplayName),
+		Email:       strings.TrimSpace(input.Email),
+		EmployeeNo:  strings.TrimSpace(input.EmployeeNo),
+		Status:      "active",
+	}
+	if err := validateUser(user); err != nil {
+		return User{}, err
+	}
+	audit.Action = "bootstrap.create_admin"
+	audit.ActorID = "bootstrap"
+	audit.TargetType = "user"
+	audit.TargetID = user.ID
+	return s.repo.CreateUser(ctx, user, []Role{RoleAdmin}, audit)
 }
 
 func (s *Service) SetUserRoles(ctx context.Context, actor Actor, userID string, roles []string, audit AuditEntry) error {

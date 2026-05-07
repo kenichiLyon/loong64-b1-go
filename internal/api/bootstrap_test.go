@@ -1,0 +1,63 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+
+	"github.com/kenichiLyon/loong64-b1-go/internal/config"
+	"github.com/kenichiLyon/loong64-b1-go/internal/database"
+	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
+	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+)
+
+func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Config{
+		DBDriver:          "sqlite",
+		SQLitePath:        filepath.Join(t.TempDir(), "bootstrap.db"),
+		MigrationsDir:     "../../migrations",
+		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
+		AutoMigrate:       true,
+	}
+	pool, err := database.Open(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer pool.Close()
+	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	service := teaching.NewService(teaching.NewSQLiteRepository(pool))
+	handler := newBootstrapHandler(service, cfg, nil)
+
+	statusReq := httptest.NewRequest(http.MethodGet, "/api/v1/bootstrap/status", nil)
+	statusRec := httptest.NewRecorder()
+	handler.status(statusRec, statusReq)
+	if statusRec.Code != http.StatusOK {
+		t.Fatalf("status code: %d body=%s", statusRec.Code, statusRec.Body.String())
+	}
+
+	body := bytes.NewBufferString(`{"username":"admin1","display_name":"Admin One","employee_no":"A001"}`)
+	createReq := httptest.NewRequest(http.MethodPost, "/api/v1/bootstrap/admin", body)
+	createRec := httptest.NewRecorder()
+	handler.createAdmin(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("create code: %d body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created struct {
+		User struct {
+			ID string `json:"id"`
+		} `json:"user"`
+	}
+	if err := json.Unmarshal(createRec.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.User.ID == "" {
+		t.Fatalf("missing created user id: %+v", created)
+	}
+}

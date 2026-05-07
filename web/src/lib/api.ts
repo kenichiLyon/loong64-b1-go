@@ -1,5 +1,7 @@
 import type {
   ActorProfile,
+  BootstrapCreateAdminResponse,
+  BootstrapStatus,
   CourseReportSummary,
   ExperimentReportSummary,
   EvaluationResultDetail,
@@ -21,6 +23,19 @@ export class APIClient {
 
   async me(options: RequestOptions): Promise<ActorProfile> {
     return this.request('/api/v1/me', options);
+  }
+
+  async getBootstrapStatus(): Promise<BootstrapStatus> {
+    return this.request('/api/v1/bootstrap/status', { actorID: '', roles: [] });
+  }
+
+  async bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string }): Promise<BootstrapCreateAdminResponse> {
+    return this.request('/api/v1/bootstrap/admin', {
+      actorID: '',
+      roles: [],
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   async createSubmission(experimentID: string, options: RequestOptions): Promise<Submission> {
@@ -148,8 +163,12 @@ export class APIClient {
 
   private async request<T>(path: string, options: RequestOptions): Promise<T> {
     const headers = new Headers(options.headers);
-    headers.set('X-Actor-ID', options.actorID);
-    headers.set('X-Actor-Roles', options.roles.join(','));
+    if (options.actorID) {
+      headers.set('X-Actor-ID', options.actorID);
+    }
+    if (options.roles.length > 0) {
+      headers.set('X-Actor-Roles', options.roles.join(','));
+    }
     if (options.body && !(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
     }

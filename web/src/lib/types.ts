@@ -210,6 +210,22 @@ export interface RuntimeConfigSummary {
   error?: string;
 }
 
+export interface BootstrapStatus {
+  initialized: boolean;
+  user_count: number;
+  runtime: RuntimeConfigView;
+  stored?: RuntimeConfigView;
+  message?: string;
+}
+
+export interface BootstrapCreateAdminResponse {
+  user: ActorProfile & {
+    username?: string;
+    display_name?: string;
+  };
+  message: string;
+}
+
 export interface APIErrorBody {
   error?: {
     code?: string;

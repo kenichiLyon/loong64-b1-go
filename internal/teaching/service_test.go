@@ -291,6 +291,7 @@ type fakeRepo struct {
 	reportExports                     map[string]ReportExport
 	experimentSummaries               map[string]experimentReportItem
 	courseExperiments                 []Experiment
+	userCount                         int
 }
 
 type experimentReportItem struct {
@@ -301,6 +302,9 @@ type experimentReportItem struct {
 
 func (f *fakeRepo) CreateUser(context.Context, User, []Role, AuditEntry) (User, error) {
 	return User{}, errors.New("not implemented")
+}
+func (f *fakeRepo) CountUsers(context.Context) (int, error) {
+	return f.userCount, nil
 }
 func (f *fakeRepo) ListUsers(context.Context, int) ([]User, error) {
 	return nil, errors.New("not implemented")
