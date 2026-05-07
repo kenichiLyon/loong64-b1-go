@@ -80,4 +80,4 @@ sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
 
 ## 前端静态资源
 
-Stage 5.5 前端在开发或 CI 环境中使用 Node/Vite 构建，LoongArch + 银河麒麟目标机默认只托管 `web/dist` 静态产物，不要求目标机安装 Node.js。若必须在目标机重新构建，需要单独验证 Node.js 与 npm 依赖在 LoongArch 上可用。Stage 7 默认通过 `deploy/kylin/nginx/loong64-b1-go.conf.example` 提供静态站点与 `/api`、`/health` 反向代理示例。
+Stage 5.5 前端在开发或 CI 环境中使用 Node/Vite 构建，LoongArch + 银河麒麟目标机默认只托管 `web/dist` 静态产物，不要求目标机安装 Node.js。若必须在目标机重新构建，需要单独验证 Node.js 与 npm 依赖在 LoongArch 上可用。Stage 7 默认通过 `deploy/kylin/nginx/loong64-b1-go.conf.example` 提供静态站点与 `/api`、`/health` 反向代理示例。容器资产仅作为次级交付，当前未作为 LoongArch 正式部署的主验证路径。

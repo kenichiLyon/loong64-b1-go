@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成，阶段 7.5 已推进到首个完整可用版本：支持内嵌前端单二进制、默认 SQLite 运行基础、管理员通过前端保存数据库运行配置，以及首次启动创建首个管理员。
+阶段 7 已完成，阶段 7.5 已推进到首个完整可用版本：支持内嵌前端单二进制、默认 SQLite 运行基础、管理员通过前端保存数据库运行配置、首次启动创建首个管理员，以及容器次级交付资产。
 
 已包含：
 
@@ -26,8 +26,10 @@
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
 - `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交、附件、规则核查、初评、教师复核发布和报表导出服务。
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
+- `.github/workflows/container-smoke.yml`：容器次级交付的构建与启动冒烟验证。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
 - `deploy/kylin/nginx`：银河麒麟静态站点与反向代理示例。
+- `Containerfile` / `compose.yaml`：容器次级交付资产，默认用于开发、演示和 CI 冒烟。
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：API 说明，当前版本 0.7.4。
@@ -194,6 +196,7 @@ npm run build
 - 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
 - Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
+- 容器次级交付：`docs/CONTAINER_RUNTIME.md`
 - 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`
 
 ## 目录规划
