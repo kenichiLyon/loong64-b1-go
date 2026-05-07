@@ -321,6 +321,7 @@ label {
 
 .report-panel,
 .runtime-card,
+.bootstrap-card,
 .published-card {
   margin-top: 18px;
   display: grid;

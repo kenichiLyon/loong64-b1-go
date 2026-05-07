@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import ActorSwitcher from './components/ActorSwitcher.vue';
+import BootstrapPanel from './components/BootstrapPanel.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
 import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorRole, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -32,6 +33,7 @@ const summary = ref<ExperimentReportSummary | null>(null);
 const courseSummary = ref<CourseReportSummary | null>(null);
 const exportResult = ref<ReportExport | null>(null);
 const runtimeConfig = ref<RuntimeConfigSummary | null>(null);
+const bootstrapStatus = ref<BootstrapStatus | null>(null);
 
 const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -56,6 +58,14 @@ async function createSubmission() {
     submissionID.value = submission.id;
     await loadStudentSubmission();
   });
+}
+
+async function loadBootstrapStatus() {
+  try {
+    bootstrapStatus.value = await api.getBootstrapStatus();
+  } catch (error) {
+    message.value = error instanceof Error ? error.message : String(error);
+  }
 }
 
 async function uploadArtifact() {
@@ -177,9 +187,23 @@ async function saveRuntimeConfig(payload: { db_driver: 'sqlite' | 'postgres'; sq
   });
 }
 
+async function bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string }) {
+  await runAction('初始化管理员', async () => {
+    const response = await api.bootstrapCreateAdmin(payload);
+    actorID.value = response.user.id;
+    roles.value = ['admin'];
+    await loadBootstrapStatus();
+    await loadRuntimeConfig();
+  });
+}
+
 function onFileChange(event: Event) {
   selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
 }
+
+onMounted(() => {
+  void loadBootstrapStatus();
+});
 </script>
 
 <template>
@@ -196,17 +220,24 @@ function onFileChange(event: Event) {
       </div>
     </section>
 
-    <ActorSwitcher v-model:actor-id="actorID" v-model:roles="roles" />
+    <BootstrapPanel
+      v-if="bootstrapStatus && !bootstrapStatus.initialized"
+      :busy="busy"
+      :status="bootstrapStatus"
+      @create-admin="bootstrapCreateAdmin"
+    />
+
+    <ActorSwitcher v-else v-model:actor-id="actorID" v-model:roles="roles" />
 
     <RuntimeConfigPanel
-      v-if="roles.includes('admin')"
+      v-if="bootstrapStatus?.initialized && roles.includes('admin')"
       :busy="busy"
       :summary="runtimeConfig"
       @load="loadRuntimeConfig"
       @save="saveRuntimeConfig"
     />
 
-    <section class="workspace-grid">
+    <section v-if="bootstrapStatus?.initialized !== false" class="workspace-grid">
       <section class="card flow-card student-flow">
         <p class="eyebrow">学生流程</p>
         <h2>创建提交与上传成果</h2>
@@ -287,13 +318,14 @@ function onFileChange(event: Event) {
       </section>
     </section>
 
-    <section class="dashboard-grid">
+    <section v-if="bootstrapStatus?.initialized !== false" class="dashboard-grid">
       <SubmissionDetailPanel :detail="detail" :review="review" />
       <EvaluationPanel :evaluation="evaluation" />
       <ReviewPanel :busy="busy" :evaluation="evaluation" :review="review" @save="saveReview" @publish="publishReview" />
     </section>
 
     <ReportPanel
+      v-if="bootstrapStatus?.initialized !== false"
       :busy="busy"
       :course-summary="courseSummary"
       :download-url="exportDownloadURL"
@@ -308,7 +340,7 @@ function onFileChange(event: Event) {
       @load-summary="loadExperimentSummary"
     />
 
-    <section class="card published-card">
+    <section v-if="bootstrapStatus?.initialized !== false" class="card published-card">
       <p class="eyebrow">学生查看发布结果</p>
       <h2>发布后反馈</h2>
       <p>切换为学生角色并输入自己的提交 ID 后，可读取教师发布的最终评价。</p>

@@ -67,6 +67,18 @@ RETURNING id, username, display_name, COALESCE(email, ''), COALESCE(student_no, 
 	return user, nil
 }
 
+func (r *PostgresRepository) CountUsers(ctx context.Context) (int, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return 0, err
+	}
+	var count int
+	if err := pool.QueryRow(ctx, `SELECT COUNT(*) FROM users`).Scan(&count); err != nil {
+		return 0, mapDBError(err)
+	}
+	return count, nil
+}
+
 func (r *PostgresRepository) ListUsers(ctx context.Context, limit int) ([]User, error) {
 	pool, err := r.pool()
 	if err != nil {

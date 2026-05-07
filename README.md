@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成，阶段 7.5 已推进到第三段：支持内嵌前端单二进制、默认 SQLite 运行基础，以及管理员通过前端保存数据库运行配置。
+阶段 7 已完成，阶段 7.5 已推进到首个完整可用版本：支持内嵌前端单二进制、默认 SQLite 运行基础、管理员通过前端保存数据库运行配置，以及首次启动创建首个管理员。
 
 已包含：
 
@@ -30,7 +30,7 @@
 - `deploy/kylin/nginx`：银河麒麟静态站点与反向代理示例。
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.3。
+- `api/openapi.yaml`：API 说明，当前版本 0.7.4。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
@@ -69,6 +69,7 @@ curl http://127.0.0.1:8080/health/ready
 `/health/ready` 会检查当前数据库驱动和本地对象存储。默认 SQLite 模式下，只要数据库文件可打开且存储目录可写，`ready` 应返回 `200`。
 
 管理员可通过 PC Web 中的“运行配置”卡片保存 `sqlite / postgres` 数据库模式和连接参数；后端会写入 `runtime.json`，并明确提示需要重启服务生效。
+如果数据库中还没有任何用户，PC Web 会优先进入 bootstrap 卡片，允许直接创建首个管理员。
 
 ## 数据库迁移
 
