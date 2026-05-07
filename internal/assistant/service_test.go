@@ -49,6 +49,7 @@ func TestBootstrapAssistantCreatesFirstAdmin(t *testing.T) {
 			"username":     "admin1",
 			"display_name": "Admin One",
 			"employee_no":  "A001",
+			"password":     "test-pass",
 		}),
 	})
 	if err != nil {
@@ -90,6 +91,7 @@ func TestDeploymentAssistantSavesRuntimeConfig(t *testing.T) {
 		Username:    "admin1",
 		DisplayName: "Admin One",
 		EmployeeNo:  "A001",
+		Password:    "test-pass",
 	}, teaching.AuditEntry{}); err != nil {
 		t.Fatalf("bootstrap admin: %v", err)
 	}

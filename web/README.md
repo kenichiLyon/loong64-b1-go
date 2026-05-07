@@ -34,14 +34,20 @@ npm run build
 
 构建产物输出到 `web/dist`，目标部署可由 Go 服务前置 Nginx 或银河麒麟 systemd 环境中的静态资源服务托管。
 
-## 开发态身份
+## 登录与开发态身份
 
-MVP 使用请求头模拟登录：
+当前主链路默认使用服务端 session：
+
+- `POST /api/v1/auth/login`
+- `POST /api/v1/auth/logout`
+- `GET /api/v1/me`
+
+仅在本机调试并启用 `DEV_AUTH_BYPASS=true` 时，才建议继续使用：
 
 - `X-Actor-ID`
 - `X-Actor-Roles`
 
-页面顶部可切换 `student`、`teacher`、`admin` 角色。生产环境必须替换为正式认证网关或服务端会话。
+生产环境仍应继续沿着服务端会话或统一认证网关演进。
 
 ## LoongArch 注意事项
 

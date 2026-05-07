@@ -336,6 +336,29 @@
 - 无 LLM 配置时助手仍可使用规则化 fallback 回复
 - 敏感 DSN 不写入助手持久化消息与工具请求快照
 
+### 阶段 7.7：认证与会话基线
+
+目标：用最小但真实的登录会话替换主链路对 `X-Actor-ID / X-Actor-Roles` 的依赖。
+
+当前切片已完成首个可用版本：系统已支持 username/password 登录、httpOnly session cookie、bootstrap 创建首个管理员后自动登录、`/api/v1/me` 会话识别，以及 `runtime-config` / `deployment assistant` / `teaching` API 的统一 actor 解析。开发态 header bypass 仍保留，但不再作为默认交互方式。
+
+交付：
+
+- `users.password_hash`
+- `auth_sessions`
+- `/api/v1/auth/login`
+- `/api/v1/auth/logout`
+- `POST /api/v1/bootstrap/admin` 创建后自动登录
+- 前端登录面板与当前会话卡片
+
+验收：
+
+- 首次 bootstrap 后浏览器获得可用会话
+- `GET /api/v1/me` 通过 session cookie 返回当前身份
+- `POST /api/v1/auth/logout` 后会话失效
+- `POST /api/v1/auth/login` 可恢复会话
+- `DEV_AUTH_BYPASS=true` 时仍可在本机通过 header 调试
+
 ### 阶段 8：安全、性能、UAT 与发布
 
 目标：完成试点验收和可交付发布包。

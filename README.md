@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成，阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本：部署助手支持 bootstrap/admin 两个作用域的持久会话与受控工具调用。
+阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；认证基线已接入：主链路支持 username/password + httpOnly session cookie，会话优先于 `X-Actor-*` 开发态头。
 
 已包含：
 
@@ -32,8 +32,9 @@
 - `Containerfile` / `compose.yaml`：容器次级交付资产，默认用于开发、演示和 CI 冒烟。
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `docs/DEPLOYMENT_ASSISTANT.md`：部署助手、上下文快照与工具确认说明。
+- `internal/authn`：登录、会话、cookie 与 actor 解析。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.5。
+- `api/openapi.yaml`：API 说明，当前版本 0.7.6。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
@@ -53,6 +54,16 @@ DB_DRIVER=sqlite
 SQLITE_PATH=./data/loong64-b1-go.db
 AUTO_MIGRATE=true
 ```
+
+当前主链路认证方式：
+
+```bash
+POST /api/v1/auth/login
+POST /api/v1/auth/logout
+GET  /api/v1/me
+```
+
+浏览器端使用 `httpOnly` session cookie；`X-Actor-ID / X-Actor-Roles` 只保留给 `DEV_AUTH_BYPASS=true` 的开发态本机调试。
 
 如果需要构建可直接托管前端页面的完整二进制，先构建前端，再使用 `webui` build tag：
 
@@ -103,6 +114,9 @@ $env:DB_DRIVER='postgres'; $env:DATABASE_URL='postgres://postgres:postgres@127.0
 HTTP_ADDR=127.0.0.1:8080
 APP_ENV=development
 DEV_AUTH_BYPASS=false
+SESSION_COOKIE_NAME=loong64_b1_session
+SESSION_TTL=168h
+SESSION_SECURE_COOKIE=false
 HTTP_READ_HEADER_TIMEOUT=5s
 HTTP_SHUTDOWN_TIMEOUT=10s
 READY_TIMEOUT=2s
@@ -170,7 +184,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 
 上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布；阶段 5 发布后的教师最终评价对学生可见且不可被后台初评覆盖。阶段 6 的 HTML 报表是规范归档源，CSV 带 UTF-8 BOM 便于 WPS/Excel/LibreOffice 打开；现已补齐课程跨实验统计与对应 CSV 导出。PDF 当前不引入未验证 native/浏览器依赖，按 LoongArch 风险策略记录为待配置。
 
-开发环境临时使用请求头标识操作者：
+开发态仍可在 `DEV_AUTH_BYPASS=true` 时使用请求头标识操作者：
 
 ```bash
 X-Actor-ID: teacher-1
@@ -190,7 +204,7 @@ npm run lint
 npm run build
 ```
 
-开发服务器默认代理 `/api` 和 `/health` 到 `http://127.0.0.1:8080`，页面顶部可用 `X-Actor-ID` / `X-Actor-Roles` 模拟开发态身份。
+开发服务器默认代理 `/api` 和 `/health` 到 `http://127.0.0.1:8080`。主链路默认使用 session 登录；只有在本机且启用 `DEV_AUTH_BYPASS=true` 时，才建议继续通过 `X-Actor-ID` / `X-Actor-Roles` 做调试。
 
 ## 部署与本地数据库
 

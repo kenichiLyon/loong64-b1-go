@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/assistant"
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
@@ -20,13 +21,14 @@ type deploymentAssistantHandler struct {
 	config        config.Config
 	logger        *slog.Logger
 	devAuthBypass bool
+	authService   *authn.Service
 }
 
-func newDeploymentAssistantHandler(service *assistant.Service, teachingService *teaching.Service, cfg config.Config, logger *slog.Logger, devAuthBypass bool) *deploymentAssistantHandler {
+func newDeploymentAssistantHandler(service *assistant.Service, teachingService *teaching.Service, cfg config.Config, logger *slog.Logger, devAuthBypass bool, authService *authn.Service) *deploymentAssistantHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &deploymentAssistantHandler{service: service, teaching: teachingService, config: cfg, logger: logger, devAuthBypass: devAuthBypass}
+	return &deploymentAssistantHandler{service: service, teaching: teachingService, config: cfg, logger: logger, devAuthBypass: devAuthBypass, authService: authService}
 }
 
 func (h *deploymentAssistantHandler) createBootstrapConversation(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +87,16 @@ func (h *deploymentAssistantHandler) confirmBootstrapToolCall(w http.ResponseWri
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	if h.authService != nil && result.ToolCall.ToolName == assistant.ToolBootstrapCreateAdmin && result.ToolCall.Status == assistant.ToolCallSucceeded {
+		var response struct {
+			UserID string `json:"user_id"`
+		}
+		if err := json.Unmarshal(result.ToolCall.ResponseJSON, &response); err == nil && strings.TrimSpace(response.UserID) != "" {
+			if _, token, err := h.authService.CreateSessionForUser(r.Context(), response.UserID); err == nil {
+				h.authService.WriteSessionCookie(w, token)
+			}
+		}
 	}
 	httpx.WriteJSON(w, http.StatusOK, result)
 }
@@ -168,7 +180,7 @@ func (h *deploymentAssistantHandler) requireBootstrapScope(r *http.Request) erro
 }
 
 func (h *deploymentAssistantHandler) requireAdmin(r *http.Request) (teaching.Actor, error) {
-	actor, err := currentAPIActor(h.config, h.logger, h.devAuthBypass, r)
+	actor, err := resolveAPIActor(h.authService, h.config, h.logger, h.devAuthBypass, r)
 	if err != nil {
 		return teaching.Actor{}, err
 	}
@@ -221,25 +233,4 @@ func (h *deploymentAssistantHandler) writeError(w http.ResponseWriter, err error
 		h.logger.Error("deployment assistant api failed", "error", err)
 	}
 	httpx.WriteError(w, status, teaching.ErrorCodeOf(err), message)
-}
-
-func currentAPIActor(cfg config.Config, logger *slog.Logger, devAuthBypass bool, r *http.Request) (teaching.Actor, error) {
-	actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
-	roleHeader := strings.TrimSpace(r.Header.Get("X-Actor-Roles"))
-	if actorID == "" && roleHeader == "" && devAuthBypass && cfg.AppEnv != "production" && apiIsLocalRequest(r) {
-		actorID = "dev-admin"
-		roleHeader = "admin,teacher,student"
-		if logger != nil {
-			logger.Warn("using development auth bypass", "remote_addr", r.RemoteAddr)
-		}
-	}
-	if actorID == "" {
-		return teaching.Actor{}, &teaching.Error{Kind: teaching.KindUnauthorized, Code: "unauthorized", Message: "X-Actor-ID is required"}
-	}
-	parts := strings.FieldsFunc(roleHeader, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
-	roles, err := teaching.ParseRoleList(parts)
-	if err != nil {
-		return teaching.Actor{}, err
-	}
-	return teaching.NewActor(actorID, roles)
 }

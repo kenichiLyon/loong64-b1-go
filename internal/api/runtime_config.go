@@ -5,10 +5,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"net"
 	"net/http"
-	"strings"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
 	"github.com/kenichiLyon/loong64-b1-go/internal/runtimecfg"
@@ -20,9 +19,10 @@ type runtimeConfigHandler struct {
 	logger         *slog.Logger
 	devAuthBypass  bool
 	runtimeConfigs *runtimecfg.Manager
+	authService    *authn.Service
 }
 
-func newRuntimeConfigHandler(cfg config.Config, logger *slog.Logger, devAuthBypass bool) *runtimeConfigHandler {
+func newRuntimeConfigHandler(cfg config.Config, logger *slog.Logger, devAuthBypass bool, authService *authn.Service) *runtimeConfigHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -31,6 +31,7 @@ func newRuntimeConfigHandler(cfg config.Config, logger *slog.Logger, devAuthBypa
 		logger:         logger,
 		devAuthBypass:  devAuthBypass,
 		runtimeConfigs: runtimecfg.New(cfg.RuntimeConfigPath),
+		authService:    authService,
 	}
 }
 
@@ -98,24 +99,7 @@ func (h *runtimeConfigHandler) put(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *runtimeConfigHandler) currentActor(r *http.Request) (teaching.Actor, error) {
-	actorID := strings.TrimSpace(r.Header.Get("X-Actor-ID"))
-	roleHeader := strings.TrimSpace(r.Header.Get("X-Actor-Roles"))
-	if actorID == "" && roleHeader == "" && h.devAuthBypass && h.config.AppEnv != "production" && apiIsLocalRequest(r) {
-		actorID = "dev-admin"
-		roleHeader = "admin,teacher,student"
-		if h.logger != nil {
-			h.logger.Warn("using development auth bypass", "remote_addr", r.RemoteAddr)
-		}
-	}
-	if actorID == "" {
-		return teaching.Actor{}, &teaching.Error{Kind: teaching.KindUnauthorized, Code: "unauthorized", Message: "X-Actor-ID is required"}
-	}
-	parts := strings.FieldsFunc(roleHeader, func(r rune) bool { return r == ',' || r == ' ' || r == ';' })
-	roles, err := teaching.ParseRoleList(parts)
-	if err != nil {
-		return teaching.Actor{}, err
-	}
-	return teaching.NewActor(actorID, roles)
+	return resolveAPIActor(h.authService, h.config, h.logger, h.devAuthBypass, r)
 }
 
 func (h *runtimeConfigHandler) decode(w http.ResponseWriter, r *http.Request, dst any) bool {
@@ -134,15 +118,6 @@ func (h *runtimeConfigHandler) decode(w http.ResponseWriter, r *http.Request, ds
 		return false
 	}
 	return true
-}
-
-func apiIsLocalRequest(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func (h *runtimeConfigHandler) writeError(w http.ResponseWriter, err error) {

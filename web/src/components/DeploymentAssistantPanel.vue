@@ -22,6 +22,7 @@ const draftTool = reactive({
   display_name: 'Bootstrap Admin',
   employee_no: 'A001',
   email: '',
+  password: '',
   db_driver: 'sqlite' as 'sqlite' | 'postgres',
   sqlite_path: './data/loong64-b1-go.db',
   database_url: '',
@@ -54,6 +55,7 @@ function confirmTool() {
         display_name: draftTool.display_name,
         employee_no: draftTool.employee_no || undefined,
         email: draftTool.email || undefined,
+        password: draftTool.password,
       };
       break;
     case 'test_sqlite_path':
@@ -121,6 +123,10 @@ function confirmTool() {
         <label>
           邮箱
           <input v-model="draftTool.email" />
+        </label>
+        <label>
+          密码
+          <input v-model="draftTool.password" type="password" />
         </label>
       </template>
       <template v-else-if="pendingTool.tool_name === 'test_sqlite_path'">

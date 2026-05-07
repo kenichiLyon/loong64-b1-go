@@ -21,7 +21,7 @@ func TestRuntimeConfigHandlerSaveAndLoad(t *testing.T) {
 		SQLitePath:        "./data/active.db",
 		AutoMigrate:       true,
 	}
-	handler := newRuntimeConfigHandler(cfg, nil, false)
+	handler := newRuntimeConfigHandler(cfg, nil, false, nil)
 
 	body := bytes.NewBufferString(`{"db_driver":"postgres","database_url":"postgres://user:pass@127.0.0.1:5432/db?sslmode=disable","auto_migrate":false}`)
 	saveReq := httptest.NewRequest(http.MethodPut, "/api/v1/admin/runtime-config", body)

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/httpx"
 	"github.com/kenichiLyon/loong64-b1-go/internal/runtimecfg"
@@ -18,9 +19,10 @@ type bootstrapHandler struct {
 	config         config.Config
 	logger         *slog.Logger
 	runtimeConfigs *runtimecfg.Manager
+	authService    *authn.Service
 }
 
-func newBootstrapHandler(service *teaching.Service, cfg config.Config, logger *slog.Logger) *bootstrapHandler {
+func newBootstrapHandler(service *teaching.Service, cfg config.Config, logger *slog.Logger, authService *authn.Service) *bootstrapHandler {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -29,6 +31,7 @@ func newBootstrapHandler(service *teaching.Service, cfg config.Config, logger *s
 		config:         cfg,
 		logger:         logger,
 		runtimeConfigs: runtimecfg.New(cfg.RuntimeConfigPath),
+		authService:    authService,
 	}
 }
 
@@ -86,6 +89,17 @@ func (h *bootstrapHandler) createAdmin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.writeError(w, err)
 		return
+	}
+	if h.authService != nil {
+		if session, token, err := h.authService.CreateSessionForUser(r.Context(), user.ID); err == nil {
+			h.authService.WriteSessionCookie(w, token)
+			httpx.WriteJSON(w, http.StatusCreated, map[string]any{
+				"user":    user,
+				"roles":   session.User.Roles,
+				"message": "bootstrap completed and admin session created",
+			})
+			return
+		}
 	}
 	httpx.WriteJSON(w, http.StatusCreated, map[string]any{
 		"user":    user,
