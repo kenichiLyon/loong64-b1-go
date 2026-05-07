@@ -2,13 +2,14 @@
 import { computed, onMounted, reactive, ref } from 'vue';
 import ActorSwitcher from './components/ActorSwitcher.vue';
 import BootstrapPanel from './components/BootstrapPanel.vue';
+import DeploymentAssistantPanel from './components/DeploymentAssistantPanel.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
 import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -34,6 +35,8 @@ const courseSummary = ref<CourseReportSummary | null>(null);
 const exportResult = ref<ReportExport | null>(null);
 const runtimeConfig = ref<RuntimeConfigSummary | null>(null);
 const bootstrapStatus = ref<BootstrapStatus | null>(null);
+const bootstrapAssistant = ref<AssistantConversationDetail | null>(null);
+const deploymentAssistant = ref<AssistantConversationDetail | null>(null);
 
 const requestOptions = computed(() => ({ actorID: actorID.value, roles: roles.value }));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -66,6 +69,50 @@ async function loadBootstrapStatus() {
   } catch (error) {
     message.value = error instanceof Error ? error.message : String(error);
   }
+}
+
+async function ensureBootstrapAssistantConversation() {
+  if (bootstrapAssistant.value || bootstrapStatus.value?.initialized) {
+    return;
+  }
+  const conversation = await api.createBootstrapAssistantConversation();
+  bootstrapAssistant.value = await api.getBootstrapAssistantConversation(conversation.id);
+}
+
+async function ensureDeploymentAssistantConversation() {
+  if (deploymentAssistant.value || !roles.value.includes('admin') || bootstrapStatus.value?.initialized === false) {
+    return;
+  }
+  const conversation = await api.createDeploymentAssistantConversation(requestOptions.value);
+  deploymentAssistant.value = await api.getDeploymentAssistantConversation(conversation.id, requestOptions.value);
+}
+
+async function sendBootstrapAssistantMessage(content: string) {
+  await runAction('部署助手响应中', async () => {
+    await ensureBootstrapAssistantConversation();
+    if (!bootstrapAssistant.value) {
+      return;
+    }
+    await api.sendBootstrapAssistantMessage(bootstrapAssistant.value.conversation.id, content);
+    bootstrapAssistant.value = await api.getBootstrapAssistantConversation(bootstrapAssistant.value.conversation.id);
+  });
+}
+
+async function confirmBootstrapAssistantTool(toolCall: AssistantToolCall, inputs: Record<string, unknown>) {
+  await runAction(`执行 ${toolCall.tool_name}`, async () => {
+    const result = await api.confirmBootstrapAssistantToolCall(toolCall.id, inputs);
+    if (bootstrapAssistant.value) {
+      bootstrapAssistant.value = await api.getBootstrapAssistantConversation(bootstrapAssistant.value.conversation.id);
+    }
+    await loadBootstrapStatus();
+    if (toolCall.tool_name === 'bootstrap_create_admin') {
+      const userID = String((result.tool_call.response_json as Record<string, unknown>).user_id || '');
+      if (userID) {
+        actorID.value = userID;
+        roles.value = ['admin'];
+      }
+    }
+  });
 }
 
 async function uploadArtifact() {
@@ -187,6 +234,27 @@ async function saveRuntimeConfig(payload: { db_driver: 'sqlite' | 'postgres'; sq
   });
 }
 
+async function sendDeploymentAssistantMessage(content: string) {
+  await runAction('部署助手响应中', async () => {
+    await ensureDeploymentAssistantConversation();
+    if (!deploymentAssistant.value) {
+      return;
+    }
+    await api.sendDeploymentAssistantMessage(deploymentAssistant.value.conversation.id, content, requestOptions.value);
+    deploymentAssistant.value = await api.getDeploymentAssistantConversation(deploymentAssistant.value.conversation.id, requestOptions.value);
+  });
+}
+
+async function confirmDeploymentAssistantTool(toolCall: AssistantToolCall, inputs: Record<string, unknown>) {
+  await runAction(`执行 ${toolCall.tool_name}`, async () => {
+    await api.confirmDeploymentAssistantToolCall(toolCall.id, inputs, requestOptions.value);
+    if (deploymentAssistant.value) {
+      deploymentAssistant.value = await api.getDeploymentAssistantConversation(deploymentAssistant.value.conversation.id, requestOptions.value);
+    }
+    await loadRuntimeConfig();
+  });
+}
+
 async function bootstrapCreateAdmin(payload: { username: string; display_name: string; email?: string; employee_no?: string }) {
   await runAction('初始化管理员', async () => {
     const response = await api.bootstrapCreateAdmin(payload);
@@ -227,6 +295,18 @@ onMounted(() => {
       @create-admin="bootstrapCreateAdmin"
     />
 
+    <DeploymentAssistantPanel
+      v-if="bootstrapStatus && !bootstrapStatus.initialized"
+      :bootstrap-status="bootstrapStatus"
+      :busy="busy"
+      :detail="bootstrapAssistant"
+      :runtime-config="runtimeConfig"
+      scope="bootstrap"
+      @confirm="confirmBootstrapAssistantTool"
+      @ensure-conversation="ensureBootstrapAssistantConversation"
+      @send="sendBootstrapAssistantMessage"
+    />
+
     <ActorSwitcher v-else v-model:actor-id="actorID" v-model:roles="roles" />
 
     <RuntimeConfigPanel
@@ -235,6 +315,18 @@ onMounted(() => {
       :summary="runtimeConfig"
       @load="loadRuntimeConfig"
       @save="saveRuntimeConfig"
+    />
+
+    <DeploymentAssistantPanel
+      v-if="bootstrapStatus?.initialized && roles.includes('admin')"
+      :bootstrap-status="bootstrapStatus"
+      :busy="busy"
+      :detail="deploymentAssistant"
+      :runtime-config="runtimeConfig"
+      scope="deployment_admin"
+      @confirm="confirmDeploymentAssistantTool"
+      @ensure-conversation="ensureDeploymentAssistantConversation"
+      @send="sendDeploymentAssistantMessage"
     />
 
     <section v-if="bootstrapStatus?.initialized !== false" class="workspace-grid">

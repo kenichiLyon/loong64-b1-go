@@ -315,6 +315,27 @@
 - PostgreSQL 模式保持现有主链路能力。
 - 数据库切换通过初始化向导或管理员设置完成，并明确要求重启生效。
 
+### 阶段 7.6：部署助手与上下文工程
+
+目标：为初始化、运行配置和数据库切换提供服务端持久会话、上下文快照和受控工具执行能力。
+
+当前切片已完成首个可用版本：已交付 bootstrap/deployment admin 两个作用域的部署助手，支持服务端持久会话、上下文快照、工具确认、首个管理员创建、运行配置读取、SQLite 路径测试、PostgreSQL 连接测试与 `runtime.json` 保存；无 LLM 配置时提供规则化 fallback。报表问答与评分解释助手仍在后续切片。
+
+交付：
+
+- `assistant_conversations`、`assistant_messages`、`assistant_context_snapshots`、`assistant_tool_calls`、`assistant_llm_calls`
+- bootstrap 部署助手 API
+- admin deployment assistant API
+- 前端部署助手面板
+- 敏感信息脱敏与受控工具确认
+
+验收：
+
+- 未初始化系统中可通过 bootstrap 助手创建首个管理员
+- 已初始化系统中 admin 可通过 deployment assistant 测试数据库连接并保存 `runtime.json`
+- 无 LLM 配置时助手仍可使用规则化 fallback 回复
+- 敏感 DSN 不写入助手持久化消息与工具请求快照
+
 ### 阶段 8：安全、性能、UAT 与发布
 
 目标：完成试点验收和可交付发布包。

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.4
+  version: 0.7.5
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -91,6 +91,88 @@ paths:
         '400':
           $ref: '#/components/responses/Error'
         '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/assistant/conversations:
+    post:
+      summary: 创建 bootstrap 部署助手会话
+      operationId: createBootstrapAssistantConversation
+      responses:
+        '201':
+          description: 会话已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConversation'
+        '403':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/assistant/conversations/{conversationId}:
+    get:
+      summary: 读取 bootstrap 部署助手会话
+      operationId: getBootstrapAssistantConversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConversationDetail'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/assistant/conversations/{conversationId}/messages:
+    post:
+      summary: 向 bootstrap 部署助手发送消息
+      operationId: sendBootstrapAssistantMessage
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendAssistantMessageRequest'
+      responses:
+        '200':
+          description: 助手响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSendMessageResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/bootstrap/assistant/tool-calls/{toolCallId}/confirm:
+    post:
+      summary: 确认执行 bootstrap 部署助手工具
+      operationId: confirmBootstrapAssistantToolCall
+      parameters:
+        - $ref: '#/components/parameters/ToolCallId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmAssistantToolCallRequest'
+      responses:
+        '200':
+          description: 工具执行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConfirmToolResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
   /api/v1/admin/users:
     get:
@@ -254,6 +336,94 @@ paths:
         '401':
           $ref: '#/components/responses/Error'
         '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/admin/deployment-assistant/conversations:
+    post:
+      summary: 创建管理员部署助手会话
+      operationId: createDeploymentAssistantConversation
+      responses:
+        '201':
+          description: 会话已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConversation'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/admin/deployment-assistant/conversations/{conversationId}:
+    get:
+      summary: 读取管理员部署助手会话
+      operationId: getDeploymentAssistantConversation
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      responses:
+        '200':
+          description: 会话详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConversationDetail'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/admin/deployment-assistant/conversations/{conversationId}/messages:
+    post:
+      summary: 向管理员部署助手发送消息
+      operationId: sendDeploymentAssistantMessage
+      parameters:
+        - $ref: '#/components/parameters/ConversationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendAssistantMessageRequest'
+      responses:
+        '200':
+          description: 助手响应
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantSendMessageResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /api/v1/admin/deployment-assistant/tool-calls/{toolCallId}/confirm:
+    post:
+      summary: 确认执行管理员部署助手工具
+      operationId: confirmDeploymentAssistantToolCall
+      parameters:
+        - $ref: '#/components/parameters/ToolCallId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConfirmAssistantToolCallRequest'
+      responses:
+        '200':
+          description: 工具执行结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssistantConfirmToolResult'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
           $ref: '#/components/responses/Error'
     put:
       summary: 管理员保存运行时数据库配置
@@ -833,6 +1003,18 @@ components:
       required: true
       schema:
         type: string
+    ConversationId:
+      name: conversationId
+      in: path
+      required: true
+      schema:
+        type: string
+    ToolCallId:
+      name: toolCallId
+      in: path
+      required: true
+      schema:
+        type: string
     ExportId:
       name: exportId
       in: path
@@ -1128,6 +1310,150 @@ components:
           $ref: '#/components/schemas/RuntimeConfigView'
         message:
           type: string
+    AssistantConversation:
+      type: object
+      required: [id, scope_type, status, prompt_version, created_at, updated_at, last_message_at]
+      properties:
+        id:
+          type: string
+        scope_type:
+          type: string
+          enum: [bootstrap, deployment_admin]
+        actor_id:
+          type: string
+        status:
+          type: string
+          enum: [active, closed]
+        model:
+          type: string
+        prompt_version:
+          type: string
+        summary_text:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        last_message_at:
+          type: string
+          format: date-time
+    AssistantContextSnapshot:
+      type: object
+      required: [id, conversation_id, scope_stage, payload_json, created_at]
+      properties:
+        id:
+          type: string
+        conversation_id:
+          type: string
+        scope_stage:
+          type: string
+          enum: [bootstrap_status, runtime_config, db_connectivity, admin_init]
+        payload_json:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+    AssistantToolCall:
+      type: object
+      required: [id, conversation_id, tool_name, status, request_json, response_json, created_at]
+      properties:
+        id:
+          type: string
+        conversation_id:
+          type: string
+        tool_name:
+          type: string
+          enum: [inspect_bootstrap_status, inspect_runtime_config, test_sqlite_path, test_postgres_connection, save_runtime_config, bootstrap_create_admin]
+        status:
+          type: string
+          enum: [pending_confirmation, running, succeeded, failed, cancelled]
+        request_json:
+          type: object
+        response_json:
+          type: object
+        error:
+          type: string
+        confirmed_by_actor:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    AssistantMessage:
+      type: object
+      required: [id, conversation_id, role, content_text, created_at]
+      properties:
+        id:
+          type: string
+        conversation_id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant, tool]
+        content_text:
+          type: string
+        context_snapshot_id:
+          type: string
+        tool_call_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    AssistantConversationDetail:
+      type: object
+      required: [conversation, messages]
+      properties:
+        conversation:
+          $ref: '#/components/schemas/AssistantConversation'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AssistantMessage'
+        pending_tool_call:
+          $ref: '#/components/schemas/AssistantToolCall'
+        latest_context_snapshot:
+          $ref: '#/components/schemas/AssistantContextSnapshot'
+    SendAssistantMessageRequest:
+      type: object
+      required: [content]
+      properties:
+        content:
+          type: string
+    ConfirmAssistantToolCallRequest:
+      type: object
+      properties:
+        inputs:
+          type: object
+    AssistantSendMessageResult:
+      type: object
+      required: [conversation, assistant_message, context_snapshot, requires_confirmation]
+      properties:
+        conversation:
+          $ref: '#/components/schemas/AssistantConversation'
+        assistant_message:
+          $ref: '#/components/schemas/AssistantMessage'
+        pending_tool_call:
+          $ref: '#/components/schemas/AssistantToolCall'
+        context_snapshot:
+          $ref: '#/components/schemas/AssistantContextSnapshot'
+        requires_confirmation:
+          type: boolean
+    AssistantConfirmToolResult:
+      type: object
+      required: [conversation, tool_call, tool_message, assistant_message]
+      properties:
+        conversation:
+          $ref: '#/components/schemas/AssistantConversation'
+        tool_call:
+          $ref: '#/components/schemas/AssistantToolCall'
+        tool_message:
+          $ref: '#/components/schemas/AssistantMessage'
+        assistant_message:
+          $ref: '#/components/schemas/AssistantMessage'
     RubricTemplate:
       type: object
       properties:

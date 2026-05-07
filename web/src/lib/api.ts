@@ -1,5 +1,10 @@
 import type {
   ActorProfile,
+  AssistantConfirmToolResult,
+  AssistantConversation,
+  AssistantConversationDetail,
+  AssistantSendMessageResult,
+  AssistantToolCall,
   BootstrapCreateAdminResponse,
   BootstrapStatus,
   CourseReportSummary,
@@ -35,6 +40,32 @@ export class APIClient {
       roles: [],
       method: 'POST',
       body: JSON.stringify(payload),
+    });
+  }
+
+  async createBootstrapAssistantConversation(): Promise<AssistantConversation> {
+    return this.request('/api/v1/bootstrap/assistant/conversations', { actorID: '', roles: [], method: 'POST' });
+  }
+
+  async getBootstrapAssistantConversation(conversationID: string): Promise<AssistantConversationDetail> {
+    return this.request(`/api/v1/bootstrap/assistant/conversations/${encodeURIComponent(conversationID)}`, { actorID: '', roles: [] });
+  }
+
+  async sendBootstrapAssistantMessage(conversationID: string, content: string): Promise<AssistantSendMessageResult> {
+    return this.request(`/api/v1/bootstrap/assistant/conversations/${encodeURIComponent(conversationID)}/messages`, {
+      actorID: '',
+      roles: [],
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async confirmBootstrapAssistantToolCall(toolCallID: string, inputs: Record<string, unknown>): Promise<AssistantConfirmToolResult> {
+    return this.request(`/api/v1/bootstrap/assistant/tool-calls/${encodeURIComponent(toolCallID)}/confirm`, {
+      actorID: '',
+      roles: [],
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
     });
   }
 
@@ -154,6 +185,33 @@ export class APIClient {
       ...options,
       method: 'PUT',
       body: JSON.stringify(payload),
+    });
+  }
+
+  async createDeploymentAssistantConversation(options: RequestOptions): Promise<AssistantConversation> {
+    return this.request('/api/v1/admin/deployment-assistant/conversations', {
+      ...options,
+      method: 'POST',
+    });
+  }
+
+  async getDeploymentAssistantConversation(conversationID: string, options: RequestOptions): Promise<AssistantConversationDetail> {
+    return this.request(`/api/v1/admin/deployment-assistant/conversations/${encodeURIComponent(conversationID)}`, options);
+  }
+
+  async sendDeploymentAssistantMessage(conversationID: string, content: string, options: RequestOptions): Promise<AssistantSendMessageResult> {
+    return this.request(`/api/v1/admin/deployment-assistant/conversations/${encodeURIComponent(conversationID)}/messages`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async confirmDeploymentAssistantToolCall(toolCallID: string, inputs: Record<string, unknown>, options: RequestOptions): Promise<AssistantConfirmToolResult> {
+    return this.request(`/api/v1/admin/deployment-assistant/tool-calls/${encodeURIComponent(toolCallID)}/confirm`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({ inputs }),
     });
   }
 

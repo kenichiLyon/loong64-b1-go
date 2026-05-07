@@ -322,10 +322,60 @@ label {
 .report-panel,
 .runtime-card,
 .bootstrap-card,
+.assistant-card,
 .published-card {
   margin-top: 18px;
   display: grid;
   gap: 10px;
+}
+
+.assistant-thread {
+  display: grid;
+  gap: 10px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.assistant-message {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.assistant-message span,
+.assistant-meta span {
+  color: var(--muted);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+}
+
+.assistant-message p {
+  margin: 0.4rem 0 0;
+  white-space: pre-wrap;
+}
+
+.assistant-message.assistant {
+  border-color: rgba(41, 85, 107, 0.35);
+}
+
+.assistant-message.tool {
+  border-color: rgba(96, 114, 65, 0.35);
+}
+
+.assistant-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.assistant-tool {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(216, 74, 39, 0.3);
+  border-radius: 22px;
+  padding: 14px;
+  background: rgba(216, 74, 39, 0.06);
 }
 
 .runtime-toggle {
