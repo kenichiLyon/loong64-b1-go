@@ -24,12 +24,14 @@ RUN GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -tags webui -ldflag
 FROM scratch
 COPY --from=go-build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=go-build /out/loong64-b1-go /loong64-b1-go
+COPY --from=go-build /src/migrations /migrations
 EXPOSE 8080
 VOLUME ["/var/lib/loong64-b1-go"]
 ENV HTTP_ADDR=0.0.0.0:8080 \
     APP_ENV=production \
     STORAGE_ROOT=/var/lib/loong64-b1-go/storage \
     RUNTIME_CONFIG_PATH=/var/lib/loong64-b1-go/config/runtime.json \
+    MIGRATIONS_DIR=/migrations \
     DB_DRIVER=sqlite \
     SQLITE_PATH=/var/lib/loong64-b1-go/data/loong64-b1-go.db \
     AUTO_MIGRATE=true

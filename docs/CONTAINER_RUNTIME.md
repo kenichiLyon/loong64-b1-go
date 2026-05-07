@@ -16,6 +16,8 @@
 - `compose.yaml`：默认 SQLite 服务与可选 PostgreSQL profile
 - `.github/workflows/container-smoke.yml`：在 GitHub Actions 上执行镜像构建与默认 SQLite 启动冒烟
 
+镜像内已包含 `/migrations`，并设置 `MIGRATIONS_DIR=/migrations`，因此默认 SQLite 容器会在启动时自动完成迁移。
+
 ## 构建
 
 Docker：
