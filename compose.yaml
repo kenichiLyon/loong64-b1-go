@@ -1,0 +1,65 @@
+name: loong64-b1-go
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: loong64-b1-go:dev
+    ports:
+      - "8080:8080"
+    environment:
+      APP_ENV: production
+      DB_DRIVER: sqlite
+      SQLITE_PATH: /var/lib/loong64-b1-go/data/loong64-b1-go.db
+      AUTO_MIGRATE: "true"
+      STORAGE_ROOT: /var/lib/loong64-b1-go/storage
+      RUNTIME_CONFIG_PATH: /var/lib/loong64-b1-go/config/runtime.json
+    volumes:
+      - app-data:/var/lib/loong64-b1-go
+    restart: unless-stopped
+
+  postgres:
+    profiles: ["postgres"]
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: loong64_b1
+      POSTGRES_USER: loong64_b1
+      POSTGRES_PASSWORD: loong64_b1_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loong64_b1 -d loong64_b1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app-postgres:
+    profiles: ["postgres"]
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: loong64-b1-go:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8080"
+    environment:
+      APP_ENV: production
+      DB_DRIVER: postgres
+      DATABASE_URL: postgres://loong64_b1:loong64_b1_dev@postgres:5432/loong64_b1?sslmode=disable
+      AUTO_MIGRATE: "true"
+      STORAGE_ROOT: /var/lib/loong64-b1-go/storage
+      RUNTIME_CONFIG_PATH: /var/lib/loong64-b1-go/config/runtime.json
+    volumes:
+      - app-postgres-data:/var/lib/loong64-b1-go
+    restart: unless-stopped
+
+volumes:
+  app-data: {}
+  postgres-data: {}
+  app-postgres-data: {}
