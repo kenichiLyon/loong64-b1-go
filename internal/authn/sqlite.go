@@ -115,7 +115,7 @@ func (r *SQLiteRepository) TouchSession(ctx context.Context, session Session) (S
 	if err != nil {
 		return Session{}, err
 	}
-	if _, err := db.ExecContext(ctx, `UPDATE auth_sessions SET last_seen_at = ? WHERE id = ?`, session.LastSeenAt, session.ID); err != nil {
+	if _, err := db.ExecContext(ctx, `UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE id = ?`, session.LastSeenAt, session.ExpiresAt, session.ID); err != nil {
 		return Session{}, sqliteMapError(err)
 	}
 	return r.GetSessionByTokenHash(ctx, session.TokenHash)

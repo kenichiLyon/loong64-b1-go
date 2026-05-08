@@ -293,6 +293,71 @@ func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
 	}
 }
 
+func TestAuthRejectsMutatingRequestWithCrossOrigin(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Config{
+		DBDriver:          "sqlite",
+		SQLitePath:        filepath.Join(t.TempDir(), "auth-origin.db"),
+		MigrationsDir:     "../../migrations",
+		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
+		SessionCookieName: "test_session",
+		CSRFCookieName:    "test_csrf",
+		SessionTTL:        24 * time.Hour,
+	}
+	pool, err := database.Open(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer pool.Close()
+	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
+	if _, err := teachingService.BootstrapCreateAdmin(t.Context(), teaching.BootstrapCreateAdminInput{
+		Username:    "admin1",
+		DisplayName: "Admin One",
+		EmployeeNo:  "A001",
+		Password:    "test-pass",
+	}, teaching.AuditEntry{}); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+
+	authService := authn.NewService(authn.NewSQLiteRepository(pool), cfg)
+	authHandler := newAuthHandler(authService, cfg, nil, false)
+	resolver := authHandler.resolveActor
+	mux := http.NewServeMux()
+	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
+		Service:      teachingService,
+		AppEnv:       cfg.AppEnv,
+		ResolveActor: resolver,
+	})
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
+
+	loginRec := httptest.NewRecorder()
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
+	mux.ServeHTTP(loginRec, loginReq)
+	cookies := loginRec.Result().Cookies()
+	sessionCookie := cookieByName(cookies, cfg.SessionCookieName)
+	csrf := cookieByName(cookies, cfg.CSRFCookieName)
+	if sessionCookie == nil || csrf == nil {
+		t.Fatal("expected session and csrf cookies")
+	}
+
+	createUserReq := httptest.NewRequest(http.MethodPost, "/api/v1/admin/users", bytes.NewBufferString(`{"username":"student1","display_name":"Student One","student_no":"S001","roles":["student"]}`))
+	createUserReq.Host = "example.com"
+	createUserReq.Header.Set("Origin", "https://evil.example")
+	createUserReq.Header.Set("X-CSRF-Token", csrf.Value)
+	createUserReq.AddCookie(sessionCookie)
+	createUserReq.AddCookie(csrf)
+	createUserRec := httptest.NewRecorder()
+	mux.ServeHTTP(createUserRec, createUserReq)
+	if createUserRec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 with cross origin, got %d body=%s", createUserRec.Code, createUserRec.Body.String())
+	}
+}
+
 func TestAuthChangeOwnPasswordRequiresRelogin(t *testing.T) {
 	t.Parallel()
 

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.8
+  version: 0.7.9
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
