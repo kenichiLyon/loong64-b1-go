@@ -53,20 +53,16 @@ jobs:
 
       - name: Build release artifacts
         run: |
-          mkdir -p dist
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/loong64-b1-go-linux-amd64 ./cmd/server
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -tags webui -trimpath -ldflags="-s -w" -o dist/loong64-b1-go-linux-amd64-full ./cmd/server
-          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/loong64-b1-go-linux-loong64 ./cmd/server
-          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -tags webui -trimpath -ldflags="-s -w" -o dist/loong64-b1-go-linux-loong64-full ./cmd/server
-          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/loong64-b1-migrate-linux-loong64 ./cmd/migrate
-          tar -C web/dist -czf dist/loong64-b1-go-web.tar.gz .
-          cp README.md PLAN.md AGENT.md dist/
-          (cd dist && sha256sum * > SHA256SUMS)
+          mkdir -p dist/raw
+          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-go-linux-loong64 ./cmd/server
+          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -tags webui -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-go-linux-loong64-full ./cmd/server
+          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-migrate-linux-loong64 ./cmd/migrate
+          bash scripts/release/package-release.sh dist/raw dist/release
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: auto-build-${{ github.sha }}
-          path: dist/*
+          path: dist/release/*
           if-no-files-found: error
           retention-days: 30

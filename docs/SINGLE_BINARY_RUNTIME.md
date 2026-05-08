@@ -33,10 +33,10 @@
 - 在后端增加 `go:embed`，打包 `web/dist`。
 - `internal/api` 对 `/api`、`/health` 继续走现有路由，其余路径走静态文件或 SPA fallback `index.html`。
 - 开发态保留 `vite dev server` 代理方式；发布态默认使用内嵌前端。
-- CI 增加一类产物：
-  - `loong64-b1-go-linux-loong64`
-  - `loong64-b1-go-linux-loong64-full`
-  - 可选保留 `loong64-b1-go-web.tar.gz`，便于 Nginx 分离部署
+- CI 增加一类用户向 bundle：
+  - `loong64-b1-go-full-linux-loong64.tar.gz`
+  - `loong64-b1-go-backend-linux-loong64.tar.gz`
+  - `loong64-b1-go-frontend.tar.gz`
 
 验收：
 
@@ -47,7 +47,7 @@
 
 - 默认 `go build ./cmd/server` 仍构建纯后端二进制。
 - 在执行 `npm run build --prefix web` 后，使用 `go build -tags webui ./cmd/server` 可构建内嵌前端的完整二进制。
-- CI 已同时产出纯后端二进制和带 `-full` 后缀的完整二进制。
+- CI 与 Release 现在对外只发布 3 个 bundle，其中 `full` 是主交付，`backend/frontend` 只用于明确需要分离部署的场景。
 
 ### 阶段 B：数据库运行时抽象
 

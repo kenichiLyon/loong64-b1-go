@@ -65,14 +65,21 @@ jobs:
 
       - name: Prepare release notes
         run: |
+          checksum_block="$(cat release-dist/SHA256SUMS)"
           cat > release-notes.md <<EOF
           Auto Build artifact release
 
           - Source commit: ${{ steps.source.outputs.head_sha }}
           - Source workflow run: ${{ steps.source.outputs.run_id }}
-          - Target platform: linux/amd64 and linux/loong64
-          - Web artifact: loong64-b1-go-web.tar.gz static bundle
+          - Primary delivery: loong64-b1-go-full-linux-loong64.tar.gz
+          - Optional split delivery: loong64-b1-go-backend-linux-loong64.tar.gz + loong64-b1-go-frontend.tar.gz
           - Deployment target: LoongArch + 银河麒麟高级服务器版
+
+          Checksums:
+
+          \`\`\`
+          ${checksum_block}
+          \`\`\`
 
           This CD job publishes artifacts produced by Auto Build without rebuilding them.
           EOF
@@ -88,7 +95,10 @@ jobs:
             echo "Release $TAG already exists; skipping publish."
             exit 0
           fi
-          gh release create "$TAG" release-dist/* \
+          gh release create "$TAG" \
+            release-dist/loong64-b1-go-full-linux-loong64.tar.gz \
+            release-dist/loong64-b1-go-backend-linux-loong64.tar.gz \
+            release-dist/loong64-b1-go-frontend.tar.gz \
             --repo "$GITHUB_REPOSITORY" \
             --target "$HEAD_SHA" \
             --title "Auto Build $TAG" \

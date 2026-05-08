@@ -161,7 +161,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 
 ## CI/CD
 
-- Auto Build：每次 push、PR 或手动触发时运行格式检查、Go 测试、Web 构建、linux/amd64 和 linux/loong64 构建，并上传纯后端二进制、内嵌前端的 `*-full` 二进制以及 `loong64-b1-go-web.tar.gz`。
+- Auto Build：每次 push、PR 或手动触发时运行格式检查、Go 测试、Web 构建和 loong64 目标构建，并组装 3 个用户向 bundle：`full`、`backend`、`frontend`。
 - Code Quality Review：每次 push、PR 或手动触发时运行 `golangci-lint` 与前端构建；PR 中配置 `SOURCERY_TOKEN` 后自动运行 SourceryAI 代码审核。
 - CD Publish Artifacts：`main` 分支 Auto Build 成功后自动下载其产物并创建 GitHub Release，也支持手动输入 run id 发布指定构建。
 
