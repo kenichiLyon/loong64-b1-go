@@ -58,6 +58,7 @@ func TestAuthLoginLogoutAndMe(t *testing.T) {
 	})
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.logout)
+	mux.HandleFunc("PUT /api/v1/auth/password", authHandler.changePassword)
 
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
 	loginRec := httptest.NewRecorder()
@@ -146,6 +147,7 @@ func TestAdminCanSetUserPasswordAndLogin(t *testing.T) {
 		ResolveActor: resolver,
 	})
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
+	mux.HandleFunc("PUT /api/v1/auth/password", authHandler.changePassword)
 
 	loginRec := httptest.NewRecorder()
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
@@ -193,6 +195,43 @@ func TestAdminCanSetUserPasswordAndLogin(t *testing.T) {
 	if studentLoginRec.Code != http.StatusOK {
 		t.Fatalf("student login code: %d body=%s", studentLoginRec.Code, studentLoginRec.Body.String())
 	}
+	studentSession := cookieByName(studentLoginRec.Result().Cookies(), cfg.SessionCookieName)
+	if studentSession == nil {
+		t.Fatal("expected student session cookie")
+	}
+
+	resetAgainReq := httptest.NewRequest(http.MethodPut, "/api/v1/admin/users/"+created.ID+"/password", bytes.NewBufferString(`{"password":"student-pass-2"}`))
+	resetAgainReq.SetPathValue("userID", created.ID)
+	resetAgainReq.AddCookie(sessionCookie)
+	resetAgainReq.AddCookie(csrf)
+	resetAgainReq.Header.Set("X-CSRF-Token", csrf.Value)
+	resetAgainRec := httptest.NewRecorder()
+	mux.ServeHTTP(resetAgainRec, resetAgainReq)
+	if resetAgainRec.Code != http.StatusNoContent {
+		t.Fatalf("second set password code: %d body=%s", resetAgainRec.Code, resetAgainRec.Body.String())
+	}
+
+	studentMeReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	studentMeReq.AddCookie(studentSession)
+	studentMeRec := httptest.NewRecorder()
+	mux.ServeHTTP(studentMeRec, studentMeReq)
+	if studentMeRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked student session, got %d body=%s", studentMeRec.Code, studentMeRec.Body.String())
+	}
+
+	studentOldLoginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"student1","password":"student-pass"}`))
+	studentOldLoginRec := httptest.NewRecorder()
+	mux.ServeHTTP(studentOldLoginRec, studentOldLoginReq)
+	if studentOldLoginRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected old student password to fail, got %d body=%s", studentOldLoginRec.Code, studentOldLoginRec.Body.String())
+	}
+
+	studentNewLoginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"student1","password":"student-pass-2"}`))
+	studentNewLoginRec := httptest.NewRecorder()
+	mux.ServeHTTP(studentNewLoginRec, studentNewLoginReq)
+	if studentNewLoginRec.Code != http.StatusOK {
+		t.Fatalf("student new login code: %d body=%s", studentNewLoginRec.Code, studentNewLoginRec.Body.String())
+	}
 }
 
 func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
@@ -235,6 +274,7 @@ func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
 		ResolveActor: authHandler.resolveActor,
 	})
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
+	mux.HandleFunc("PUT /api/v1/auth/password", authHandler.changePassword)
 
 	loginRec := httptest.NewRecorder()
 	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
@@ -250,6 +290,96 @@ func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
 	mux.ServeHTTP(createUserRec, createUserReq)
 	if createUserRec.Code != http.StatusForbidden {
 		t.Fatalf("expected 403 without csrf header, got %d body=%s", createUserRec.Code, createUserRec.Body.String())
+	}
+}
+
+func TestAuthChangeOwnPasswordRequiresRelogin(t *testing.T) {
+	t.Parallel()
+
+	cfg := config.Config{
+		DBDriver:               "sqlite",
+		SQLitePath:             filepath.Join(t.TempDir(), "auth-self-password.db"),
+		MigrationsDir:          "../../migrations",
+		RuntimeConfigPath:      filepath.Join(t.TempDir(), "runtime.json"),
+		SessionCookieName:      "test_session",
+		CSRFCookieName:         "test_csrf",
+		SessionTTL:             24 * time.Hour,
+		SessionCleanupInterval: time.Minute,
+	}
+	pool, err := database.Open(t.Context(), cfg)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer pool.Close()
+	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
+	if _, err := teachingService.BootstrapCreateAdmin(t.Context(), teaching.BootstrapCreateAdminInput{
+		Username:    "admin1",
+		DisplayName: "Admin One",
+		EmployeeNo:  "A001",
+		Password:    "test-pass",
+	}, teaching.AuditEntry{}); err != nil {
+		t.Fatalf("bootstrap admin: %v", err)
+	}
+
+	authService := authn.NewService(authn.NewSQLiteRepository(pool), cfg)
+	authHandler := newAuthHandler(authService, cfg, nil, false)
+	resolver := authHandler.resolveActor
+	mux := http.NewServeMux()
+	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
+		Service:      teachingService,
+		AppEnv:       cfg.AppEnv,
+		ResolveActor: resolver,
+	})
+	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
+	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.logout)
+	mux.HandleFunc("PUT /api/v1/auth/password", authHandler.changePassword)
+
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
+	loginRec := httptest.NewRecorder()
+	mux.ServeHTTP(loginRec, loginReq)
+	if loginRec.Code != http.StatusOK {
+		t.Fatalf("login code: %d body=%s", loginRec.Code, loginRec.Body.String())
+	}
+	sessionCookie := cookieByName(loginRec.Result().Cookies(), cfg.SessionCookieName)
+	csrf := cookieByName(loginRec.Result().Cookies(), cfg.CSRFCookieName)
+	if sessionCookie == nil || csrf == nil {
+		t.Fatal("expected session and csrf cookies")
+	}
+
+	changeReq := httptest.NewRequest(http.MethodPut, "/api/v1/auth/password", bytes.NewBufferString(`{"current_password":"test-pass","new_password":"new-pass"}`))
+	changeReq.AddCookie(sessionCookie)
+	changeReq.AddCookie(csrf)
+	changeReq.Header.Set("X-CSRF-Token", csrf.Value)
+	changeRec := httptest.NewRecorder()
+	mux.ServeHTTP(changeRec, changeReq)
+	if changeRec.Code != http.StatusNoContent {
+		t.Fatalf("change password code: %d body=%s", changeRec.Code, changeRec.Body.String())
+	}
+
+	meReq := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	meReq.AddCookie(sessionCookie)
+	meRec := httptest.NewRecorder()
+	mux.ServeHTTP(meRec, meReq)
+	if meRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected revoked session after self password change, got %d body=%s", meRec.Code, meRec.Body.String())
+	}
+
+	oldLoginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"test-pass"}`))
+	oldLoginRec := httptest.NewRecorder()
+	mux.ServeHTTP(oldLoginRec, oldLoginReq)
+	if oldLoginRec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected old password to fail, got %d body=%s", oldLoginRec.Code, oldLoginRec.Body.String())
+	}
+
+	newLoginReq := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", bytes.NewBufferString(`{"username":"admin1","password":"new-pass"}`))
+	newLoginRec := httptest.NewRecorder()
+	mux.ServeHTTP(newLoginRec, newLoginReq)
+	if newLoginRec.Code != http.StatusOK {
+		t.Fatalf("expected new password login to succeed, got %d body=%s", newLoginRec.Code, newLoginRec.Body.String())
 	}
 }
 

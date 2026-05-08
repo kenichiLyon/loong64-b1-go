@@ -168,7 +168,14 @@ func (r *PostgresRepository) SetUserPassword(ctx context.Context, userID string,
 		return err
 	}
 	defer rollback(ctx, tx)
-	if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, passwordHash); err != nil {
+	tag, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return mapDBError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return notFoundError("user not found")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth_sessions WHERE user_id = $1`, userID); err != nil {
 		return mapDBError(err)
 	}
 	if err := insertAudit(ctx, tx, audit); err != nil {

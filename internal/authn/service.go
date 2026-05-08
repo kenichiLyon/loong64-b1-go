@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -49,11 +50,15 @@ type Repository interface {
 	GetSessionByTokenHash(context.Context, string) (Session, error)
 	TouchSession(context.Context, Session) (Session, error)
 	DeleteSessionByTokenHash(context.Context, string) error
+	RotatePassword(context.Context, string, string) error
+	DeleteExpiredSessions(context.Context, time.Time) (int64, error)
 }
 
 type Service struct {
-	repo Repository
-	cfg  config.Config
+	repo          Repository
+	cfg           config.Config
+	cleanupMu     sync.Mutex
+	lastCleanupAt time.Time
 }
 
 func NewService(repo Repository, cfg config.Config) *Service {
@@ -64,6 +69,7 @@ func (s *Service) Login(ctx context.Context, username, password string) (Session
 	if s == nil || s.repo == nil {
 		return Session{}, "", unavailableError("auth service is not configured", nil)
 	}
+	s.cleanupExpiredSessionsIfDue(ctx)
 	user, err := s.repo.GetUserAuthByUsername(ctx, strings.TrimSpace(username))
 	if err != nil {
 		return Session{}, "", err
@@ -116,11 +122,8 @@ func (s *Service) ResolveRequestActor(ctx context.Context, r *http.Request) (tea
 	if s == nil || s.repo == nil {
 		return teaching.Actor{}, unavailableError("auth service is not configured", nil)
 	}
-	cookie, err := r.Cookie(s.sessionCookieName())
-	if err != nil {
-		return teaching.Actor{}, unauthorizedError("session cookie is required")
-	}
-	session, err := s.repo.GetSessionByTokenHash(ctx, hashToken(cookie.Value))
+	s.cleanupExpiredSessionsIfDue(ctx)
+	session, err := s.sessionFromRequest(ctx, r)
 	if err != nil {
 		return teaching.Actor{}, err
 	}
@@ -142,6 +145,41 @@ func (s *Service) Logout(ctx context.Context, r *http.Request) error {
 		return nil
 	}
 	return s.repo.DeleteSessionByTokenHash(ctx, hashToken(cookie.Value))
+}
+
+func (s *Service) ChangePassword(ctx context.Context, r *http.Request, currentPassword, newPassword string) error {
+	if s == nil || s.repo == nil {
+		return unavailableError("auth service is not configured", nil)
+	}
+	s.cleanupExpiredSessionsIfDue(ctx)
+	session, err := s.sessionFromRequest(ctx, r)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(session.User.PasswordHash) == "" {
+		return unauthorizedError("password is not configured for this account")
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(session.User.PasswordHash), []byte(currentPassword)); err != nil {
+		return unauthorizedError("current password is invalid")
+	}
+	if strings.TrimSpace(newPassword) == "" {
+		return validationError("new password is required")
+	}
+	if strings.TrimSpace(currentPassword) == strings.TrimSpace(newPassword) {
+		return validationError("new password must be different from current password")
+	}
+	passwordHash, err := HashPassword(newPassword)
+	if err != nil {
+		return unavailableError("failed to hash password", err)
+	}
+	return s.repo.RotatePassword(ctx, session.UserID, passwordHash)
+}
+
+func (s *Service) CleanupExpiredSessions(ctx context.Context) (int64, error) {
+	if s == nil || s.repo == nil {
+		return 0, unavailableError("auth service is not configured", nil)
+	}
+	return s.repo.DeleteExpiredSessions(ctx, time.Now().UTC())
 }
 
 func (s *Service) ValidateCSRF(r *http.Request) error {
@@ -244,6 +282,37 @@ func (s *Service) sessionTTL() time.Duration {
 		return s.cfg.SessionTTL
 	}
 	return defaultSessionTTL
+}
+
+func (s *Service) sessionCleanupInterval() time.Duration {
+	if s != nil {
+		return s.cfg.SessionCleanupInterval
+	}
+	return 0
+}
+
+func (s *Service) sessionFromRequest(ctx context.Context, r *http.Request) (Session, error) {
+	cookie, err := r.Cookie(s.sessionCookieName())
+	if err != nil {
+		return Session{}, unauthorizedError("session cookie is required")
+	}
+	return s.repo.GetSessionByTokenHash(ctx, hashToken(cookie.Value))
+}
+
+func (s *Service) cleanupExpiredSessionsIfDue(ctx context.Context) {
+	interval := s.sessionCleanupInterval()
+	if interval <= 0 || s == nil || s.repo == nil {
+		return
+	}
+	now := time.Now().UTC()
+	s.cleanupMu.Lock()
+	if !s.lastCleanupAt.IsZero() && now.Sub(s.lastCleanupAt) < interval {
+		s.cleanupMu.Unlock()
+		return
+	}
+	s.lastCleanupAt = now
+	s.cleanupMu.Unlock()
+	_, _ = s.repo.DeleteExpiredSessions(ctx, now)
 }
 
 func csrfProtectedMethod(method string) bool {

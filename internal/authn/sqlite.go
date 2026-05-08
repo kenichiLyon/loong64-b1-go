@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
@@ -129,6 +130,55 @@ func (r *SQLiteRepository) DeleteSessionByTokenHash(ctx context.Context, tokenHa
 		return sqliteMapError(err)
 	}
 	return nil
+}
+
+func (r *SQLiteRepository) RotatePassword(ctx context.Context, userID string, passwordHash string) error {
+	db, err := r.sqlDB()
+	if err != nil {
+		return err
+	}
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollbackSQLiteAuthTx(ctx, tx)
+	result, err := tx.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, passwordHash, userID)
+	if err != nil {
+		return sqliteMapError(err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return sqliteMapError(err)
+	}
+	if rows == 0 {
+		return notFoundError("auth resource not found")
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM auth_sessions WHERE user_id = ?`, userID); err != nil {
+		return sqliteMapError(err)
+	}
+	return tx.Commit()
+}
+
+func (r *SQLiteRepository) DeleteExpiredSessions(ctx context.Context, before time.Time) (int64, error) {
+	db, err := r.sqlDB()
+	if err != nil {
+		return 0, err
+	}
+	result, err := db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE expires_at <= ?`, before)
+	if err != nil {
+		return 0, sqliteMapError(err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, sqliteMapError(err)
+	}
+	return rows, nil
+}
+
+func rollbackSQLiteAuthTx(_ context.Context, tx *sql.Tx) {
+	if tx != nil {
+		_ = tx.Rollback()
+	}
 }
 
 func sqliteMapError(err error) error {

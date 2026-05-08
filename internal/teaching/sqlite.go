@@ -324,7 +324,18 @@ func (r *SQLiteRepository) SetUserPassword(ctx context.Context, userID string, p
 		return err
 	}
 	defer sqliteRollback(ctx, tx)
-	if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID, passwordHash); err != nil {
+	result, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return sqliteMapDBError(err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return sqliteMapDBError(err)
+	}
+	if rows == 0 {
+		return notFoundError("user not found")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth_sessions WHERE user_id = $1`, userID); err != nil {
 		return sqliteMapDBError(err)
 	}
 	if err := sqliteInsertAudit(ctx, tx, audit); err != nil {

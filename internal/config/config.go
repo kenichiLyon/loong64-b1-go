@@ -30,6 +30,7 @@ type Config struct {
 	SessionCookieName         string
 	CSRFCookieName            string
 	SessionTTL                time.Duration
+	SessionCleanupInterval    time.Duration
 	SessionSecureCookie       bool
 	MaxUploadBytes            int64
 	MaxArtifactsPerSubmission int
@@ -94,6 +95,7 @@ func Load() Config {
 		SessionCookieName:         getenv("SESSION_COOKIE_NAME", "loong64_b1_session"),
 		CSRFCookieName:            getenv("CSRF_COOKIE_NAME", "loong64_b1_csrf"),
 		SessionTTL:                durationFromEnv("SESSION_TTL", 168*time.Hour),
+		SessionCleanupInterval:    durationFromEnv("SESSION_CLEANUP_INTERVAL", time.Hour),
 		SessionSecureCookie:       boolFromEnv("SESSION_SECURE_COOKIE", getenv("APP_ENV", "development") == "production"),
 		MaxUploadBytes:            int64FromEnv("MAX_UPLOAD_BYTES", 50*1024*1024),
 		MaxArtifactsPerSubmission: intFromEnv("MAX_ARTIFACTS_PER_SUBMISSION", 20),

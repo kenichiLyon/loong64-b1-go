@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.7
+  version: 0.7.8
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -86,6 +86,25 @@ paths:
       responses:
         '204':
           description: 会话已清除
+  /api/v1/auth/password:
+    put:
+      summary: 已登录用户修改当前密码
+      operationId: changeOwnPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: 密码已更新，当前会话已失效
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
   /api/v1/bootstrap/status:
     get:
       summary: 读取首次启动状态
@@ -281,7 +300,7 @@ paths:
               $ref: '#/components/schemas/SetUserPasswordRequest'
       responses:
         '204':
-          description: 密码已更新
+          description: 密码已更新，目标用户现有会话已吊销
         '400':
           $ref: '#/components/responses/Error'
         '403':
@@ -1151,6 +1170,14 @@ components:
       required: [password]
       properties:
         password:
+          type: string
+    ChangePasswordRequest:
+      type: object
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+        new_password:
           type: string
     Role:
       type: string

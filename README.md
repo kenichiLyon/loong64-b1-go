@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本：主链路使用 username/password + httpOnly session cookie，管理员可为现有用户设置/重置密码。
+阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本；阶段 8 的首个安全收口切片已进入可用版本：主链路支持 username/password + httpOnly session cookie、自助改密、管理员重置密码，以及密码变更后的 session 吊销。
 
 已包含：
 
@@ -34,6 +34,7 @@
 - `docs/DEPLOYMENT_ASSISTANT.md`：部署助手、上下文快照与工具确认说明。
 - `internal/authn`：登录、会话、cookie 与 actor 解析。
 - 管理员可通过后端 API 和 PC Web 用户管理卡片为现有用户设置密码。
+- 已登录用户可通过后端 API 和 PC Web 账号安全卡片修改当前密码；修改后需要重新登录。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
 - `api/openapi.yaml`：API 说明，当前版本 0.7.7。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
@@ -61,6 +62,7 @@ AUTO_MIGRATE=true
 ```bash
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
+PUT  /api/v1/auth/password
 GET  /api/v1/me
 PUT  /api/v1/admin/users/{userID}/password
 ```
@@ -117,7 +119,9 @@ HTTP_ADDR=127.0.0.1:8080
 APP_ENV=development
 DEV_AUTH_BYPASS=false
 SESSION_COOKIE_NAME=loong64_b1_session
+CSRF_COOKIE_NAME=loong64_b1_csrf
 SESSION_TTL=168h
+SESSION_CLEANUP_INTERVAL=1h
 SESSION_SECURE_COOKIE=false
 HTTP_READ_HEADER_TIMEOUT=5s
 HTTP_SHUTDOWN_TIMEOUT=10s

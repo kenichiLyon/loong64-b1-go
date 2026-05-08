@@ -89,6 +89,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass, authService)
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", authHandler.logout)
+	mux.HandleFunc("PUT /api/v1/auth/password", authHandler.changePassword)
 	if assistantService != nil {
 		deploymentAssistantHandler := newDeploymentAssistantHandler(assistantService, teachingService, deps.Config, logger, deps.Config.DevAuthBypass, authService)
 		mux.HandleFunc("POST /api/v1/bootstrap/assistant/conversations", deploymentAssistantHandler.createBootstrapConversation)

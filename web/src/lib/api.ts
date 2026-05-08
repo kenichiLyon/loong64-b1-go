@@ -58,6 +58,13 @@ export class APIClient {
     });
   }
 
+  async changeOwnPassword(payload: { current_password: string; new_password: string }): Promise<void> {
+    return this.request('/api/v1/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async createBootstrapAssistantConversation(): Promise<AssistantConversation> {
     return this.request('/api/v1/bootstrap/assistant/conversations', { actorID: '', roles: [], method: 'POST' });
   }

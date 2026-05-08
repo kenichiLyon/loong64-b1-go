@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -138,6 +139,46 @@ func (r *PostgresRepository) DeleteSessionByTokenHash(ctx context.Context, token
 		return mapDBError(err)
 	}
 	return nil
+}
+
+func (r *PostgresRepository) RotatePassword(ctx context.Context, userID string, passwordHash string) error {
+	if _, err := r.pool(); err != nil {
+		return err
+	}
+	tx, err := r.db.Raw().BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollbackAuthTx(ctx, tx)
+	tag, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, passwordHash)
+	if err != nil {
+		return mapDBError(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return notFoundError("auth resource not found")
+	}
+	if _, err := tx.Exec(ctx, `DELETE FROM auth_sessions WHERE user_id = $1`, userID); err != nil {
+		return mapDBError(err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) DeleteExpiredSessions(ctx context.Context, before time.Time) (int64, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return 0, err
+	}
+	tag, err := pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1`, before)
+	if err != nil {
+		return 0, mapDBError(err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+func rollbackAuthTx(ctx context.Context, tx pgx.Tx) {
+	if tx != nil {
+		_ = tx.Rollback(ctx)
+	}
 }
 
 func mapDBError(err error) error {
