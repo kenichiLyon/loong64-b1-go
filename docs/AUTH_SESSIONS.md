@@ -43,6 +43,7 @@
 SESSION_COOKIE_NAME=loong64_b1_session
 CSRF_COOKIE_NAME=loong64_b1_csrf
 SESSION_TTL=168h
+SESSION_REFRESH_INTERVAL=15m
 SESSION_CLEANUP_INTERVAL=1h
 SESSION_SECURE_COOKIE=false
 ```
@@ -53,6 +54,8 @@ SESSION_SECURE_COOKIE=false
   - session cookie
   - CSRF cookie
   - `X-CSRF-Token` 请求头
+- 如果请求携带 `Origin`，其 host 必须与当前请求 host 一致。
+- 如果没有 `Origin` 但携带 `Referer`，其 host 也必须与当前请求 host 一致。
 - 校验方式是双提交 cookie：`X-CSRF-Token` 必须与 `CSRF_COOKIE_NAME` cookie 的值一致。
 - 主要影响：
   - `POST /api/v1/auth/logout`
@@ -91,6 +94,17 @@ SESSION_SECURE_COOKIE=false
 - 每次登录或解析 session 时，服务端最多每个间隔执行一次：
   - `DELETE FROM auth_sessions WHERE expires_at <= now()`
 - 设置为 `0` 或非正值时可关闭该清理策略。
+
+## 会话续期
+
+- 当前 session 采用滑动续期。
+- `SESSION_TTL` 仍是单次续期后的有效期长度。
+- `SESSION_REFRESH_INTERVAL` 控制最小续期间隔，默认 `15m`。
+- 当请求带有有效 session 且距离上次刷新已超过该间隔时，服务端会：
+  - 更新 `auth_sessions.last_seen_at`
+  - 延长 `auth_sessions.expires_at`
+  - 重写浏览器里的 session / csrf cookie 过期时间
+- 对变更请求，只有在 CSRF 和同源校验通过后才会执行这次续期。
 
 ## 开发态 bypass
 

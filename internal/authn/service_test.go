@@ -118,6 +118,80 @@ func TestCleanupExpiredSessionsDeletesExpiredRows(t *testing.T) {
 	}
 }
 
+func TestRefreshSessionIfDueExtendsExpiryAndRewritesCookies(t *testing.T) {
+	t.Parallel()
+
+	cfg, pool, _ := newSQLiteAuthService(t, "auth-refresh.db")
+	defer pool.Close()
+	cfg.SessionRefreshInterval = time.Minute
+	service := NewService(NewSQLiteRepository(pool), cfg)
+
+	_, token, err := service.Login(context.Background(), "admin1", "test-pass")
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	tokenHash := hashToken(token)
+	oldLastSeen := time.Now().UTC().Add(-2 * time.Minute)
+	oldExpires := time.Now().UTC().Add(30 * time.Second)
+	if _, err := pool.SQLDB().ExecContext(context.Background(), `UPDATE auth_sessions SET last_seen_at = ?, expires_at = ? WHERE token_hash = ?`, oldLastSeen, oldExpires, tokenHash); err != nil {
+		t.Fatalf("seed session timestamps: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/me", nil)
+	req.Host = "example.com"
+	req.AddCookie(&http.Cookie{Name: cfg.SessionCookieName, Value: token})
+	req.AddCookie(&http.Cookie{Name: cfg.CSRFCookieName, Value: "csrf-token"})
+	rec := httptest.NewRecorder()
+
+	if err := service.RefreshSessionIfDue(context.Background(), req, rec); err != nil {
+		t.Fatalf("refresh session: %v", err)
+	}
+
+	session, err := service.repo.GetSessionByTokenHash(context.Background(), tokenHash)
+	if err != nil {
+		t.Fatalf("load refreshed session: %v", err)
+	}
+	if !session.LastSeenAt.After(oldLastSeen) {
+		t.Fatalf("expected last_seen_at to advance, got %s <= %s", session.LastSeenAt, oldLastSeen)
+	}
+	if !session.ExpiresAt.After(oldExpires) {
+		t.Fatalf("expected expires_at to advance, got %s <= %s", session.ExpiresAt, oldExpires)
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) < 2 {
+		t.Fatalf("expected refreshed session and csrf cookies, got %d", len(cookies))
+	}
+}
+
+func TestValidateCSRFAcceptsSameOriginAndRejectsCrossOrigin(t *testing.T) {
+	t.Parallel()
+
+	service := NewService(nil, config.Config{
+		SessionCookieName: "test_session",
+		CSRFCookieName:    "test_csrf",
+	})
+
+	sameOriginReq := httptest.NewRequest(http.MethodPost, "http://example.com/api/v1/auth/logout", nil)
+	sameOriginReq.Host = "example.com"
+	sameOriginReq.Header.Set("Origin", "http://example.com")
+	sameOriginReq.Header.Set("X-CSRF-Token", "csrf-token")
+	sameOriginReq.AddCookie(&http.Cookie{Name: "test_session", Value: "session-token"})
+	sameOriginReq.AddCookie(&http.Cookie{Name: "test_csrf", Value: "csrf-token"})
+	if err := service.ValidateCSRF(sameOriginReq); err != nil {
+		t.Fatalf("expected same-origin request to pass, got %v", err)
+	}
+
+	crossOriginReq := httptest.NewRequest(http.MethodPost, "http://example.com/api/v1/auth/logout", nil)
+	crossOriginReq.Host = "example.com"
+	crossOriginReq.Header.Set("Origin", "https://evil.example")
+	crossOriginReq.Header.Set("X-CSRF-Token", "csrf-token")
+	crossOriginReq.AddCookie(&http.Cookie{Name: "test_session", Value: "session-token"})
+	crossOriginReq.AddCookie(&http.Cookie{Name: "test_csrf", Value: "csrf-token"})
+	if err := service.ValidateCSRF(crossOriginReq); teaching.ErrorKindOf(err) != teaching.KindForbidden {
+		t.Fatalf("expected cross-origin request to be forbidden, got %v", err)
+	}
+}
+
 func newSQLiteAuthService(t *testing.T, dbName string) (config.Config, *database.Pool, *Service) {
 	t.Helper()
 
