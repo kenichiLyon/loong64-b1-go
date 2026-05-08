@@ -35,6 +35,7 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("GET /api/v1/admin/users", h.listUsers)
 	mux.HandleFunc("POST /api/v1/admin/users", h.createUser)
 	mux.HandleFunc("PUT /api/v1/admin/users/{userID}/roles", h.setUserRoles)
+	mux.HandleFunc("PUT /api/v1/admin/users/{userID}/password", h.setUserPassword)
 	mux.HandleFunc("POST /api/v1/admin/classes", h.createClass)
 	mux.HandleFunc("POST /api/v1/admin/courses", h.createCourse)
 	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/classes", h.addCourseClass)
@@ -123,6 +124,23 @@ func (h *HTTPHandler) setUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.SetUserRoles(r.Context(), actor, r.PathValue("userID"), input.Roles, h.audit(r)); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *HTTPHandler) setUserPassword(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input SetUserPasswordInput
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.SetUserPassword(r.Context(), actor, r.PathValue("userID"), input, h.audit(r)); err != nil {
 		h.writeError(w, err)
 		return
 	}

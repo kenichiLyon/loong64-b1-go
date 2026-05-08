@@ -158,6 +158,25 @@ func (r *PostgresRepository) SetUserRoles(ctx context.Context, userID string, ro
 	return tx.Commit(ctx)
 }
 
+func (r *PostgresRepository) SetUserPassword(ctx context.Context, userID string, passwordHash string, audit AuditEntry) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollback(ctx, tx)
+	if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, passwordHash); err != nil {
+		return mapDBError(err)
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *PostgresRepository) UserHasRole(ctx context.Context, userID string, role Role) (bool, error) {
 	pool, err := r.pool()
 	if err != nil {

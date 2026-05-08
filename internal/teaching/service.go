@@ -136,6 +136,7 @@ type Repository interface {
 	CountUsers(context.Context) (int, error)
 	ListUsers(context.Context, int) ([]User, error)
 	SetUserRoles(context.Context, string, []Role, AuditEntry) error
+	SetUserPassword(context.Context, string, string, AuditEntry) error
 	UserHasRole(context.Context, string, Role) (bool, error)
 	CreateClass(context.Context, Class, AuditEntry) (Class, error)
 	CreateCourse(context.Context, Course, AuditEntry) (Course, error)
@@ -244,6 +245,10 @@ type BootstrapCreateAdminInput struct {
 	Email       string `json:"email,omitempty"`
 	EmployeeNo  string `json:"employee_no,omitempty"`
 	Password    string `json:"password"`
+}
+
+type SetUserPasswordInput struct {
+	Password string `json:"password"`
 }
 
 func (s *Service) CreateUser(ctx context.Context, actor Actor, input CreateUserInput, audit AuditEntry) (User, error) {
@@ -357,6 +362,24 @@ func (s *Service) SetUserRoles(ctx context.Context, actor Actor, userID string, 
 	audit.TargetType = "user"
 	audit.TargetID = userID
 	return s.repo.SetUserRoles(ctx, strings.TrimSpace(userID), parsed, audit)
+}
+
+func (s *Service) SetUserPassword(ctx context.Context, actor Actor, userID string, input SetUserPasswordInput, audit AuditEntry) error {
+	if err := s.ready(); err != nil {
+		return err
+	}
+	if err := actor.Require(RoleAdmin); err != nil {
+		return err
+	}
+	passwordHash, err := hashPassword(input.Password)
+	if err != nil {
+		return unavailableError("failed to hash password", err)
+	}
+	audit.Action = "user.set_password"
+	audit.ActorID = actor.ID
+	audit.TargetType = "user"
+	audit.TargetID = strings.TrimSpace(userID)
+	return s.repo.SetUserPassword(ctx, strings.TrimSpace(userID), passwordHash, audit)
 }
 
 type CreateClassInput struct {

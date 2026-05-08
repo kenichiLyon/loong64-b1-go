@@ -12,6 +12,7 @@
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/me`
+- `PUT /api/v1/admin/users/{userID}/password`
 
 ## 数据对象
 
@@ -47,6 +48,12 @@ SESSION_SECURE_COOKIE=false
 
 - `POST /api/v1/bootstrap/admin` 创建首个管理员后会直接签发 session cookie
 - bootstrap assistant 中确认 `bootstrap_create_admin` 也会直接签发 session cookie
+
+## 管理员密码重置
+
+- 管理员可以为已有用户设置或重置密码
+- 密码更新后立即生效
+- 当前版本不提供“旧密码校验后自助改密”能力
 
 ## 开发态 bypass
 

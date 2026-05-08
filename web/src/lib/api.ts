@@ -90,6 +90,18 @@ export class APIClient {
     });
   }
 
+  async listUsers(options: RequestOptions): Promise<{ items: ActorProfile[] }> {
+    return this.request('/api/v1/admin/users', options);
+  }
+
+  async setUserPassword(userID: string, password: string, options: RequestOptions): Promise<void> {
+    return this.request(`/api/v1/admin/users/${encodeURIComponent(userID)}/password`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    });
+  }
+
   async getSubmission(submissionID: string, role: 'teacher' | 'student', options: RequestOptions): Promise<SubmissionDetail> {
     return this.request(`/api/v1/${role}/submissions/${encodeURIComponent(submissionID)}`, options);
   }

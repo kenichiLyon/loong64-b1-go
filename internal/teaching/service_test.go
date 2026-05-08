@@ -261,6 +261,18 @@ func TestCreateGitLinkArtifactRespectsArtifactLimit(t *testing.T) {
 	}
 }
 
+func TestSetUserPasswordRequiresAdmin(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{})
+	err = service.SetUserPassword(context.Background(), actor, "user-1", SetUserPasswordInput{Password: "test-pass"}, AuditEntry{})
+	if ErrorKindOf(err) != KindForbidden {
+		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
 func validRubricVersionInput() CreateRubricVersionInput {
 	return CreateRubricVersionInput{
 		WeightMode: string(WeightModeStrict100),
@@ -292,6 +304,7 @@ type fakeRepo struct {
 	experimentSummaries               map[string]experimentReportItem
 	courseExperiments                 []Experiment
 	userCount                         int
+	lastPasswordHash                  string
 }
 
 type experimentReportItem struct {
@@ -311,6 +324,10 @@ func (f *fakeRepo) ListUsers(context.Context, int) ([]User, error) {
 }
 func (f *fakeRepo) SetUserRoles(context.Context, string, []Role, AuditEntry) error {
 	return errors.New("not implemented")
+}
+func (f *fakeRepo) SetUserPassword(_ context.Context, _ string, passwordHash string, _ AuditEntry) error {
+	f.lastPasswordHash = passwordHash
+	return nil
 }
 func (f *fakeRepo) UserHasRole(context.Context, string, Role) (bool, error) { return false, nil }
 func (f *fakeRepo) CreateClass(context.Context, Class, AuditEntry) (Class, error) {
