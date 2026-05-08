@@ -314,6 +314,25 @@ func (r *SQLiteRepository) SetUserRoles(ctx context.Context, userID string, role
 	return tx.Commit(ctx)
 }
 
+func (r *SQLiteRepository) SetUserPassword(ctx context.Context, userID string, passwordHash string, audit AuditEntry) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	tx, err := pool.BeginTx(ctx, sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer sqliteRollback(ctx, tx)
+	if _, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1`, userID, passwordHash); err != nil {
+		return sqliteMapDBError(err)
+	}
+	if err := sqliteInsertAudit(ctx, tx, audit); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (r *SQLiteRepository) UserHasRole(ctx context.Context, userID string, role Role) (bool, error) {
 	pool, err := r.pool()
 	if err != nil {

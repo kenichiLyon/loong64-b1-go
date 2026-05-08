@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import BootstrapPanel from './components/BootstrapPanel.vue';
+import AdminUserPanel from './components/AdminUserPanel.vue';
 import DeploymentAssistantPanel from './components/DeploymentAssistantPanel.vue';
 import EvaluationPanel from './components/EvaluationPanel.vue';
 import LoginPanel from './components/LoginPanel.vue';
@@ -9,7 +10,7 @@ import ReviewPanel from './components/ReviewPanel.vue';
 import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import { api } from './lib/api';
-import type { ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorProfile, ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -38,6 +39,7 @@ const bootstrapStatus = ref<BootstrapStatus | null>(null);
 const bootstrapAssistant = ref<AssistantConversationDetail | null>(null);
 const deploymentAssistant = ref<AssistantConversationDetail | null>(null);
 const loggedIn = ref(false);
+const users = ref<ActorProfile[]>([]);
 
 const requestOptions = computed(() => ({}));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -244,6 +246,20 @@ async function saveRuntimeConfig(payload: { db_driver: 'sqlite' | 'postgres'; sq
   });
 }
 
+async function loadUsers() {
+  await runAction('读取用户列表', async () => {
+    const response = await api.listUsers(requestOptions.value);
+    users.value = response.items;
+  });
+}
+
+async function setUserPassword(payload: { userID: string; password: string }) {
+  await runAction('设置用户密码', async () => {
+    await api.setUserPassword(payload.userID, payload.password, requestOptions.value);
+    await loadUsers();
+  });
+}
+
 async function sendDeploymentAssistantMessage(content: string) {
   await runAction('部署助手响应中', async () => {
     await ensureDeploymentAssistantConversation();
@@ -283,6 +299,7 @@ async function login(payload: { username: string; password: string }) {
     roles.value = me.roles;
     loggedIn.value = true;
     await loadRuntimeConfig();
+    await loadUsers();
   });
 }
 
@@ -294,6 +311,7 @@ async function logout() {
     roles.value = [];
     runtimeConfig.value = null;
     deploymentAssistant.value = null;
+    users.value = [];
   });
 }
 
@@ -306,6 +324,9 @@ onMounted(() => {
     await loadBootstrapStatus();
     if (bootstrapStatus.value?.initialized) {
       await loadCurrentUser();
+      if (loggedIn.value && roles.value.includes('admin')) {
+        await loadUsers();
+      }
     }
   })();
 });
@@ -366,6 +387,14 @@ onMounted(() => {
       :summary="runtimeConfig"
       @load="loadRuntimeConfig"
       @save="saveRuntimeConfig"
+    />
+
+    <AdminUserPanel
+      v-if="bootstrapStatus?.initialized && loggedIn && roles.includes('admin')"
+      :busy="busy"
+      :users="users"
+      @refresh="loadUsers"
+      @set-password="setUserPassword"
     />
 
     <DeploymentAssistantPanel

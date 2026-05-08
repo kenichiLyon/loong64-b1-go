@@ -41,6 +41,7 @@ npm run build
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
 - `GET /api/v1/me`
+- `PUT /api/v1/admin/users/{userID}/password`
 
 仅在本机调试并启用 `DEV_AUTH_BYPASS=true` 时，才建议继续使用：
 
@@ -48,6 +49,15 @@ npm run build
 - `X-Actor-Roles`
 
 生产环境仍应继续沿着服务端会话或统一认证网关演进。
+
+## 管理员能力
+
+当前前端已包含：
+
+- bootstrap 创建首个管理员
+- 运行配置保存
+- 部署助手
+- 管理员为现有用户设置/重置密码
 
 ## LoongArch 注意事项
 

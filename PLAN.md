@@ -349,7 +349,9 @@
 - `/api/v1/auth/login`
 - `/api/v1/auth/logout`
 - `POST /api/v1/bootstrap/admin` 创建后自动登录
+- `PUT /api/v1/admin/users/{userID}/password`
 - 前端登录面板与当前会话卡片
+- 前端管理员用户密码设置卡片
 
 验收：
 
@@ -357,6 +359,7 @@
 - `GET /api/v1/me` 通过 session cookie 返回当前身份
 - `POST /api/v1/auth/logout` 后会话失效
 - `POST /api/v1/auth/login` 可恢复会话
+- 管理员可为现有用户设置密码，用户可用新密码登录
 - `DEV_AUTH_BYPASS=true` 时仍可在本机通过 header 调试
 
 ### 阶段 8：安全、性能、UAT 与发布

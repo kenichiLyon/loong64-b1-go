@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；认证基线已接入：主链路支持 username/password + httpOnly session cookie，会话优先于 `X-Actor-*` 开发态头。
+阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本：主链路使用 username/password + httpOnly session cookie，管理员可为现有用户设置/重置密码。
 
 已包含：
 
@@ -33,8 +33,9 @@
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `docs/DEPLOYMENT_ASSISTANT.md`：部署助手、上下文快照与工具确认说明。
 - `internal/authn`：登录、会话、cookie 与 actor 解析。
+- 管理员可通过后端 API 和 PC Web 用户管理卡片为现有用户设置密码。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.6。
+- `api/openapi.yaml`：API 说明，当前版本 0.7.7。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
@@ -61,6 +62,7 @@ AUTO_MIGRATE=true
 POST /api/v1/auth/login
 POST /api/v1/auth/logout
 GET  /api/v1/me
+PUT  /api/v1/admin/users/{userID}/password
 ```
 
 浏览器端使用 `httpOnly` session cookie；`X-Actor-ID / X-Actor-Roles` 只保留给 `DEV_AUTH_BYPASS=true` 的开发态本机调试。

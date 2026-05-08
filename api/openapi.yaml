@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: loong64-b1-go API
-  version: 0.7.6
+  version: 0.7.7
   description: 基于大模型技术的软件实训教学结果检查评价与报表系统 API。
 servers:
   - url: http://127.0.0.1:8080
@@ -263,6 +263,25 @@ paths:
       responses:
         '204':
           description: 角色已更新
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+  /api/v1/admin/users/{userId}/password:
+    put:
+      summary: 管理员设置用户密码
+      operationId: setAdminUserPassword
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetUserPasswordRequest'
+      responses:
+        '204':
+          description: 密码已更新
         '400':
           $ref: '#/components/responses/Error'
         '403':
@@ -1125,6 +1144,12 @@ components:
       properties:
         username:
           type: string
+        password:
+          type: string
+    SetUserPasswordRequest:
+      type: object
+      required: [password]
+      properties:
         password:
           type: string
     Role:
