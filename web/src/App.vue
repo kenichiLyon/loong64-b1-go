@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
+import AccountSecurityPanel from './components/AccountSecurityPanel.vue';
 import BootstrapPanel from './components/BootstrapPanel.vue';
 import AdminUserPanel from './components/AdminUserPanel.vue';
 import DeploymentAssistantPanel from './components/DeploymentAssistantPanel.vue';
@@ -254,10 +255,18 @@ async function loadUsers() {
 }
 
 async function setUserPassword(payload: { userID: string; password: string }) {
+  const resettingSelf = payload.userID === actorID.value;
   await runAction('设置用户密码', async () => {
     await api.setUserPassword(payload.userID, payload.password, requestOptions.value);
+    if (resettingSelf) {
+      resetAuthenticatedState();
+      return;
+    }
     await loadUsers();
   });
+  if (resettingSelf && !loggedIn.value) {
+    message.value = '当前账号密码已更新，请重新登录';
+  }
 }
 
 async function sendDeploymentAssistantMessage(content: string) {
@@ -306,17 +315,38 @@ async function login(payload: { username: string; password: string }) {
 async function logout() {
   await runAction('退出登录', async () => {
     await api.logout();
-    loggedIn.value = false;
-    actorID.value = '';
-    roles.value = [];
-    runtimeConfig.value = null;
-    deploymentAssistant.value = null;
-    users.value = [];
+    resetAuthenticatedState();
   });
+}
+
+async function changeOwnPassword(payload: { current_password: string; new_password: string }) {
+  await runAction('修改当前密码', async () => {
+    await api.changeOwnPassword(payload);
+    resetAuthenticatedState();
+  });
+  if (!loggedIn.value) {
+    message.value = '密码已更新，请重新登录';
+  }
 }
 
 function onFileChange(event: Event) {
   selectedFile.value = (event.target as HTMLInputElement).files?.[0] ?? null;
+}
+
+function resetAuthenticatedState() {
+  loggedIn.value = false;
+  actorID.value = '';
+  roles.value = [];
+  runtimeConfig.value = null;
+  deploymentAssistant.value = null;
+  users.value = [];
+  detail.value = null;
+  evaluation.value = null;
+  review.value = null;
+  report.value = null;
+  summary.value = null;
+  courseSummary.value = null;
+  exportResult.value = null;
 }
 
 onMounted(() => {
@@ -380,6 +410,12 @@ onMounted(() => {
         <button :disabled="busy" @click="logout">退出登录</button>
       </div>
     </section>
+
+    <AccountSecurityPanel
+      v-if="bootstrapStatus?.initialized && loggedIn"
+      :busy="busy"
+      @change-password="changeOwnPassword"
+    />
 
     <RuntimeConfigPanel
       v-if="bootstrapStatus?.initialized && loggedIn && roles.includes('admin')"

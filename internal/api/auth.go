@@ -71,6 +71,31 @@ func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (h *authHandler) changePassword(w http.ResponseWriter, r *http.Request) {
+	if h.service == nil {
+		h.writeError(w, &teaching.Error{Kind: teaching.KindUnavailable, Code: "service_unavailable", Message: "auth service is not configured"})
+		return
+	}
+	if err := h.service.ValidateCSRF(r); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	var input struct {
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if !h.decode(w, r, &input) {
+		return
+	}
+	if err := h.service.ChangePassword(r.Context(), r, input.CurrentPassword, input.NewPassword); err != nil {
+		h.writeError(w, err)
+		return
+	}
+	h.service.ClearSessionCookie(w)
+	h.service.ClearCSRFCookie(w)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (h *authHandler) resolveActor(r *http.Request) (teaching.Actor, error) {
 	return resolveAPIActor(h.service, h.config, h.logger, h.devAuthBypass, r)
 }

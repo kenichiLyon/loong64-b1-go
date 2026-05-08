@@ -41,6 +41,7 @@ npm run build
 
 - `POST /api/v1/auth/login`
 - `POST /api/v1/auth/logout`
+- `PUT /api/v1/auth/password`
 - `GET /api/v1/me`
 - `PUT /api/v1/admin/users/{userID}/password`
 
@@ -58,6 +59,7 @@ npm run build
 - bootstrap 创建首个管理员
 - 运行配置保存
 - 部署助手
+- 当前登录用户自助改密
 - 管理员为现有用户设置/重置密码
 
 ## LoongArch 注意事项
