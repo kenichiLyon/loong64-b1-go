@@ -47,6 +47,9 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.service.WriteSessionCookie(w, token)
+	if csrfToken, err := h.service.NewCSRFCookieValue(); err == nil {
+		h.service.WriteCSRFCookie(w, csrfToken)
+	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
 		"id":           session.User.ID,
 		"username":     session.User.Username,
@@ -57,8 +60,13 @@ func (h *authHandler) login(w http.ResponseWriter, r *http.Request) {
 
 func (h *authHandler) logout(w http.ResponseWriter, r *http.Request) {
 	if h.service != nil {
+		if err := h.service.ValidateCSRF(r); err != nil {
+			h.writeError(w, err)
+			return
+		}
 		_ = h.service.Logout(r.Context(), r)
 		h.service.ClearSessionCookie(w)
+		h.service.ClearCSRFCookie(w)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -69,6 +77,9 @@ func (h *authHandler) resolveActor(r *http.Request) (teaching.Actor, error) {
 
 func resolveAPIActor(service *authn.Service, cfg config.Config, logger *slog.Logger, devAuthBypass bool, r *http.Request) (teaching.Actor, error) {
 	if service != nil {
+		if err := service.ValidateCSRF(r); err != nil {
+			return teaching.Actor{}, err
+		}
 		actor, err := service.ResolveRequestActor(r.Context(), r)
 		if err == nil {
 			return actor, nil

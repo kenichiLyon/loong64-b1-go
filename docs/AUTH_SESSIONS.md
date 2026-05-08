@@ -40,9 +40,24 @@
 
 ```env
 SESSION_COOKIE_NAME=loong64_b1_session
+CSRF_COOKIE_NAME=loong64_b1_csrf
 SESSION_TTL=168h
 SESSION_SECURE_COOKIE=false
 ```
+
+## CSRF 保护
+
+- 对所有依赖 session cookie 的变更请求，服务端要求：
+  - session cookie
+  - CSRF cookie
+  - `X-CSRF-Token` 请求头
+- 校验方式是双提交 cookie：`X-CSRF-Token` 必须与 `CSRF_COOKIE_NAME` cookie 的值一致。
+- 主要影响：
+  - `POST /api/v1/auth/logout`
+  - `POST /api/v1/admin/*`
+  - `PUT /api/v1/admin/*`
+  - 所有已初始化后的 teacher / student / admin 写接口
+- bootstrap 首次初始化接口不依赖已有 session，因此不走这套校验。
 
 ## Bootstrap 行为
 
