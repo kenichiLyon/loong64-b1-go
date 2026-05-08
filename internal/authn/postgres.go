@@ -117,10 +117,10 @@ func (r *PostgresRepository) TouchSession(ctx context.Context, session Session) 
 	}
 	if err := pool.QueryRow(ctx, `
 UPDATE auth_sessions
-SET last_seen_at = $2
+SET last_seen_at = $2, expires_at = $3
 WHERE id = $1
 RETURNING id, user_id, token_hash, expires_at, created_at, last_seen_at`,
-		session.ID, session.LastSeenAt).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.CreatedAt, &session.LastSeenAt); err != nil {
+		session.ID, session.LastSeenAt, session.ExpiresAt).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.CreatedAt, &session.LastSeenAt); err != nil {
 		return Session{}, mapDBError(err)
 	}
 	session.User, err = r.GetUserAuthByID(ctx, session.UserID)

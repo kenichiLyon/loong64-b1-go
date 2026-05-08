@@ -112,7 +112,7 @@ func NewHandler(deps Dependencies) http.Handler {
 		DevAuthBypass: deps.Config.DevAuthBypass,
 		ResolveActor:  authHandler.resolveActor,
 	})
-	return httpx.Chain(mux, httpx.Recover(logger), httpx.RequestID, httpx.AccessLog(logger))
+	return httpx.Chain(mux, httpx.Recover(logger), httpx.RequestID, sessionRefreshMiddleware(authService, logger), httpx.AccessLog(logger))
 }
 
 func rootHandler(webDist fs.FS, webEnabled bool) http.HandlerFunc {

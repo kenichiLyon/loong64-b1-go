@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -189,6 +190,9 @@ func (s *Service) ValidateCSRF(r *http.Request) error {
 	if _, err := r.Cookie(s.sessionCookieName()); err != nil {
 		return nil
 	}
+	if err := validateSameOrigin(r); err != nil {
+		return err
+	}
 	csrfCookie, err := r.Cookie(s.csrfCookieName())
 	if err != nil {
 		return forbiddenError("csrf cookie is required")
@@ -199,6 +203,50 @@ func (s *Service) ValidateCSRF(r *http.Request) error {
 	}
 	if subtle.ConstantTimeCompare([]byte(headerToken), []byte(strings.TrimSpace(csrfCookie.Value))) != 1 {
 		return forbiddenError("csrf token is invalid")
+	}
+	return nil
+}
+
+func (s *Service) RefreshSessionIfDue(ctx context.Context, r *http.Request, w http.ResponseWriter) error {
+	if s == nil || s.repo == nil || w == nil {
+		return nil
+	}
+	s.cleanupExpiredSessionsIfDue(ctx)
+	tokenCookie, err := r.Cookie(s.sessionCookieName())
+	if err != nil || strings.TrimSpace(tokenCookie.Value) == "" {
+		return nil
+	}
+	if csrfProtectedMethod(r.Method) {
+		if err := s.ValidateCSRF(r); err != nil {
+			return nil
+		}
+	}
+	session, err := s.repo.GetSessionByTokenHash(ctx, hashToken(tokenCookie.Value))
+	if err != nil {
+		if kind := teaching.ErrorKindOf(err); kind == teaching.KindNotFound || kind == teaching.KindUnauthorized {
+			return nil
+		}
+		return err
+	}
+	now := time.Now().UTC()
+	if now.After(session.ExpiresAt) {
+		_ = s.repo.DeleteSessionByTokenHash(ctx, session.TokenHash)
+		return nil
+	}
+	if !s.shouldRefreshSession(now, session) {
+		return nil
+	}
+	session.LastSeenAt = now
+	session.ExpiresAt = now.Add(s.sessionTTL())
+	if _, err := s.repo.TouchSession(ctx, session); err != nil {
+		if kind := teaching.ErrorKindOf(err); kind == teaching.KindNotFound || kind == teaching.KindUnauthorized {
+			return nil
+		}
+		return err
+	}
+	s.WriteSessionCookie(w, tokenCookie.Value)
+	if csrfCookie, err := r.Cookie(s.csrfCookieName()); err == nil && strings.TrimSpace(csrfCookie.Value) != "" {
+		s.WriteCSRFCookie(w, csrfCookie.Value)
 	}
 	return nil
 }
@@ -291,6 +339,13 @@ func (s *Service) sessionCleanupInterval() time.Duration {
 	return 0
 }
 
+func (s *Service) sessionRefreshInterval() time.Duration {
+	if s != nil && s.cfg.SessionRefreshInterval > 0 {
+		return s.cfg.SessionRefreshInterval
+	}
+	return 0
+}
+
 func (s *Service) sessionFromRequest(ctx context.Context, r *http.Request) (Session, error) {
 	cookie, err := r.Cookie(s.sessionCookieName())
 	if err != nil {
@@ -313,6 +368,48 @@ func (s *Service) cleanupExpiredSessionsIfDue(ctx context.Context) {
 	s.lastCleanupAt = now
 	s.cleanupMu.Unlock()
 	_, _ = s.repo.DeleteExpiredSessions(ctx, now)
+}
+
+func (s *Service) shouldRefreshSession(now time.Time, session Session) bool {
+	interval := s.sessionRefreshInterval()
+	if interval <= 0 {
+		return false
+	}
+	if session.LastSeenAt.IsZero() {
+		return true
+	}
+	return now.Sub(session.LastSeenAt) >= interval
+}
+
+func validateSameOrigin(r *http.Request) error {
+	origin := strings.TrimSpace(r.Header.Get("Origin"))
+	if origin != "" {
+		if err := validateSourceOrigin(origin, r.Host); err != nil {
+			return forbiddenError("origin is invalid")
+		}
+		return nil
+	}
+	referer := strings.TrimSpace(r.Header.Get("Referer"))
+	if referer != "" {
+		if err := validateSourceOrigin(referer, r.Host); err != nil {
+			return forbiddenError("referer is invalid")
+		}
+	}
+	return nil
+}
+
+func validateSourceOrigin(rawSource string, host string) error {
+	parsed, err := url.Parse(rawSource)
+	if err != nil {
+		return err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return errors.New("unsupported origin scheme")
+	}
+	if !strings.EqualFold(parsed.Host, host) {
+		return errors.New("cross-site request")
+	}
+	return nil
 }
 
 func csrfProtectedMethod(method string) bool {

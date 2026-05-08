@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本；阶段 8 的首个安全收口切片已进入可用版本：主链路支持 username/password + httpOnly session cookie、自助改密、管理员重置密码，以及密码变更后的 session 吊销。
+阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本；阶段 8 的当前安全收口切片已进入可用版本：主链路支持 username/password + httpOnly session cookie、自助改密、管理员重置密码、密码变更后的 session 吊销，以及滑动 session 续期与同源校验。
 
 已包含：
 
@@ -121,6 +121,7 @@ DEV_AUTH_BYPASS=false
 SESSION_COOKIE_NAME=loong64_b1_session
 CSRF_COOKIE_NAME=loong64_b1_csrf
 SESSION_TTL=168h
+SESSION_REFRESH_INTERVAL=15m
 SESSION_CLEANUP_INTERVAL=1h
 SESSION_SECURE_COOKIE=false
 HTTP_READ_HEADER_TIMEOUT=5s
