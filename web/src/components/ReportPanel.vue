@@ -14,9 +14,9 @@ const emit = defineEmits<{
   loadReport: [];
   loadSummary: [];
   loadCourseSummary: [];
-  exportSubmission: [format: 'html' | 'csv' | 'pdf'];
-  exportSummary: [format: 'html' | 'csv' | 'pdf'];
-  exportCourseSummary: [format: 'html' | 'csv' | 'pdf'];
+  exportSubmission: [format: 'html' | 'csv' | 'xlsx' | 'pdf'];
+  exportSummary: [format: 'html' | 'csv' | 'xlsx' | 'pdf'];
+  exportCourseSummary: [format: 'html' | 'csv' | 'xlsx' | 'pdf'];
 }>();
 
 function percent(value: number) {
@@ -31,7 +31,7 @@ function percent(value: number) {
         <p class="eyebrow">统计报表</p>
         <h2>{{ report ? '个人报告就绪' : 'Stage 6 报表导出' }}</h2>
       </div>
-      <strong class="score-badge">HTML / CSV</strong>
+      <strong class="score-badge">HTML / CSV / XLSX / PDF</strong>
     </div>
 
     <div class="button-row report-actions">
@@ -40,9 +40,14 @@ function percent(value: number) {
       <button :disabled="busy" @click="emit('loadCourseSummary')">课程统计</button>
       <button :disabled="busy" @click="emit('exportSubmission', 'html')">个人 HTML</button>
       <button :disabled="busy" @click="emit('exportSubmission', 'csv')">个人 CSV</button>
+      <button :disabled="busy" @click="emit('exportSubmission', 'xlsx')">个人 XLSX</button>
       <button :disabled="busy" @click="emit('exportSummary', 'csv')">统计 CSV</button>
+      <button :disabled="busy" @click="emit('exportSummary', 'xlsx')">统计 XLSX</button>
+      <button :disabled="busy" @click="emit('exportSummary', 'pdf')">统计 PDF</button>
       <button :disabled="busy" @click="emit('exportCourseSummary', 'csv')">课程 CSV</button>
-      <button :disabled="busy" @click="emit('exportSubmission', 'pdf')">PDF 降级记录</button>
+      <button :disabled="busy" @click="emit('exportCourseSummary', 'xlsx')">课程 XLSX</button>
+      <button :disabled="busy" @click="emit('exportCourseSummary', 'pdf')">课程 PDF</button>
+      <button :disabled="busy" @click="emit('exportSubmission', 'pdf')">个人 PDF</button>
     </div>
 
     <div v-if="report" class="facts-grid compact-facts">
@@ -129,6 +134,6 @@ function percent(value: number) {
       <a v-if="exportResult.status === 'succeeded'" :href="props.downloadUrl" target="_blank" rel="noreferrer">下载导出文件</a>
     </div>
 
-    <p class="muted">PDF 当前按 LoongArch 风险策略记录为失败/待配置，HTML 是规范归档源，CSV 可由 WPS/Excel/LibreOffice 打开。</p>
+    <p class="muted">HTML 是规范归档源；CSV 与 XLSX 面向表格分析；PDF 用于归档和打印。</p>
   </section>
 </template>

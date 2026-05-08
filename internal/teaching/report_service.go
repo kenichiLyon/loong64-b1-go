@@ -14,8 +14,6 @@ import (
 	"time"
 )
 
-const pdfExportDeferredMessage = "pdf export is deferred until a LoongArch-verified renderer and Chinese font pipeline are configured; use html as the canonical archive source or csv for Excel-compatible data"
-
 func (s *Service) GetSubmissionReport(ctx context.Context, actor Actor, submissionID string) (SubmissionReport, error) {
 	if err := s.ready(); err != nil {
 		return SubmissionReport{}, err
@@ -218,9 +216,6 @@ func (s *Service) CreateSubmissionReportExport(ctx context.Context, actor Actor,
 	if err != nil {
 		return ReportExport{}, err
 	}
-	if format == ReportFormatPDF {
-		return s.completeFailedExport(ctx, created, pdfExportDeferredMessage)
-	}
 	payload, extension, err := renderSubmissionReport(report, format)
 	if err != nil {
 		return s.completeFailedExport(ctx, created, err.Error())
@@ -266,9 +261,6 @@ func (s *Service) CreateExperimentSummaryExport(ctx context.Context, actor Actor
 	if err != nil {
 		return ReportExport{}, err
 	}
-	if format == ReportFormatPDF {
-		return s.completeFailedExport(ctx, created, pdfExportDeferredMessage)
-	}
 	payload, extension, err := renderExperimentSummary(summary, format)
 	if err != nil {
 		return s.completeFailedExport(ctx, created, err.Error())
@@ -313,9 +305,6 @@ func (s *Service) CreateCourseSummaryExport(ctx context.Context, actor Actor, co
 	created, err := s.repo.CreateReportExport(ctx, export, audit)
 	if err != nil {
 		return ReportExport{}, err
-	}
-	if format == ReportFormatPDF {
-		return s.completeFailedExport(ctx, created, pdfExportDeferredMessage)
 	}
 	payload, extension, err := renderCourseSummary(summary, format)
 	if err != nil {
@@ -436,7 +425,7 @@ func normalizeReportFormat(format ReportFormat) (ReportFormat, error) {
 		return ReportFormatHTML, nil
 	}
 	switch value {
-	case ReportFormatHTML, ReportFormatCSV, ReportFormatPDF:
+	case ReportFormatHTML, ReportFormatCSV, ReportFormatXLSX, ReportFormatPDF:
 		return value, nil
 	default:
 		return "", validationError("invalid report export format")
@@ -493,6 +482,12 @@ func renderSubmissionReport(report SubmissionReport, format ReportFormat) ([]byt
 		return []byte(renderSubmissionReportHTML(report)), "html", nil
 	case ReportFormatCSV:
 		return renderSubmissionReportCSV(report), "csv", nil
+	case ReportFormatXLSX:
+		payload, err := renderSubmissionReportXLSX(report)
+		return payload, "xlsx", err
+	case ReportFormatPDF:
+		payload, err := renderSubmissionReportPDF(report)
+		return payload, "pdf", err
 	default:
 		return nil, "", validationError("unsupported report format")
 	}
@@ -504,6 +499,12 @@ func renderExperimentSummary(summary ExperimentReportSummary, format ReportForma
 		return []byte(renderExperimentSummaryHTML(summary)), "html", nil
 	case ReportFormatCSV:
 		return renderExperimentSummaryCSV(summary), "csv", nil
+	case ReportFormatXLSX:
+		payload, err := renderExperimentSummaryXLSX(summary)
+		return payload, "xlsx", err
+	case ReportFormatPDF:
+		payload, err := renderExperimentSummaryPDF(summary)
+		return payload, "pdf", err
 	default:
 		return nil, "", validationError("unsupported report format")
 	}
@@ -515,6 +516,12 @@ func renderCourseSummary(summary CourseReportSummary, format ReportFormat) ([]by
 		return []byte(renderCourseSummaryHTML(summary)), "html", nil
 	case ReportFormatCSV:
 		return renderCourseSummaryCSV(summary), "csv", nil
+	case ReportFormatXLSX:
+		payload, err := renderCourseSummaryXLSX(summary)
+		return payload, "xlsx", err
+	case ReportFormatPDF:
+		payload, err := renderCourseSummaryPDF(summary)
+		return payload, "pdf", err
 	default:
 		return nil, "", validationError("unsupported report format")
 	}
@@ -926,6 +933,8 @@ func contentTypeForReportFormat(format ReportFormat) string {
 	switch format {
 	case ReportFormatCSV:
 		return "text/csv; charset=utf-8"
+	case ReportFormatXLSX:
+		return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 	case ReportFormatPDF:
 		return "application/pdf"
 	default:

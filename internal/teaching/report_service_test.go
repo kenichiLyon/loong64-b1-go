@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/xuri/excelize/v2"
 )
 
 func TestGetSubmissionReportStudentOnlyOwnPublished(t *testing.T) {
@@ -102,7 +104,7 @@ func TestCreateSubmissionReportExportCSVWithBOM(t *testing.T) {
 	}
 }
 
-func TestCreateSubmissionReportExportPDFDeferred(t *testing.T) {
+func TestCreateSubmissionReportExportPDFWritesFile(t *testing.T) {
 	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
 	if err != nil {
 		t.Fatal(err)
@@ -117,10 +119,41 @@ func TestCreateSubmissionReportExportPDFDeferred(t *testing.T) {
 
 	export, err := service.CreateSubmissionReportExport(context.Background(), actor, "submission-1", CreateReportExportInput{Format: ReportFormatPDF}, AuditEntry{})
 	if err != nil {
-		t.Fatalf("pdf export should be recorded as failed/deferred, not return transport error: %v", err)
+		t.Fatalf("pdf export should succeed: %v", err)
 	}
-	if export.Status != ReportExportStatusFailed || !strings.Contains(export.Error, "LoongArch-verified renderer") {
+	if export.Status != ReportExportStatusSucceeded || !strings.HasSuffix(export.StorageKey, ".pdf") || export.ByteSize == 0 {
 		t.Fatalf("unexpected pdf export status: %+v", export)
+	}
+}
+
+func TestCreateExperimentSummaryExportXLSXWritesWorkbook(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	repo := &fakeRepo{
+		teacherAllowed:      true,
+		experimentCourseID:  "course-1",
+		experimentSummaries: validExperimentReportDataset(),
+	}
+	service := NewService(repo, WithArtifactStore(testStore{root: dir}))
+
+	export, err := service.CreateExperimentSummaryExport(context.Background(), actor, "experiment-1", CreateReportExportInput{Format: ReportFormatXLSX}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("xlsx export should succeed: %v", err)
+	}
+	workbook, err := excelize.OpenFile(mustResolve(t, testStore{root: dir}, export.StorageKey))
+	if err != nil {
+		t.Fatalf("open xlsx export: %v", err)
+	}
+	defer func() { _ = workbook.Close() }()
+	value, err := workbook.GetCellValue("Summary", "A1")
+	if err != nil {
+		t.Fatalf("read workbook cell: %v", err)
+	}
+	if value != "实验统计报表" {
+		t.Fatalf("unexpected workbook content: %q", value)
 	}
 }
 

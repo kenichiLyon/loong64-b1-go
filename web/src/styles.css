@@ -168,6 +168,52 @@ label {
   margin-top: 18px;
 }
 
+.setup-panel {
+  margin-top: 18px;
+}
+
+.setup-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.teacher-setup-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.setup-block {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.setup-block h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-list button {
+  border-radius: 14px;
+  padding: 0.55rem 0.75rem;
+  box-shadow: none;
+}
+
+.metric-inline {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 100px 90px;
+  gap: 8px;
+}
+
 .identity-card {
   display: grid;
   grid-template-columns: 1.2fr 1fr 1.4fr;
@@ -447,7 +493,9 @@ label {
   .hero,
   .identity-card,
   .workspace-grid,
-  .dashboard-grid {
+  .dashboard-grid,
+  .setup-grid,
+  .teacher-setup-grid {
     grid-template-columns: 1fr;
   }
 

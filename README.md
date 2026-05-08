@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本；阶段 8 的当前安全收口切片已进入可用版本：主链路支持 username/password + httpOnly session cookie、自助改密、管理员重置密码、密码变更后的 session 吊销，以及滑动 session 续期与同源校验。
+阶段 7 已完成；阶段 7.5 已推进到首个完整可用版本；阶段 7.6 已进入首个可用版本；阶段 7.7 已进入首个可用版本；阶段 8 的当前安全收口切片已进入可用版本。当前主线已达到试点 MVP 交付标准：支持前端初始化搭建、上传/核查/初评/复核/发布闭环，以及 HTML/CSV/XLSX/PDF 报表导出。
 
 已包含：
 
@@ -33,10 +33,12 @@
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `docs/DEPLOYMENT_ASSISTANT.md`：部署助手、上下文快照与工具确认说明。
 - `internal/authn`：登录、会话、cookie 与 actor 解析。
+- `internal/teaching/assets/fonts/NotoSansSC-VF.ttf`：内嵌 PDF 中文字体资产。
 - 管理员可通过后端 API 和 PC Web 用户管理卡片为现有用户设置密码。
 - 已登录用户可通过后端 API 和 PC Web 账号安全卡片修改当前密码；修改后需要重新登录。
+- 管理员与教师可通过前端最小搭建面板创建用户、班级、课程、模板版本和实验任务。
 - `scripts/dev`：本地 PostgreSQL 初始化和启动脚本。
-- `api/openapi.yaml`：API 说明，当前版本 0.7.7。
+- `api/openapi.yaml`：API 说明，当前版本 0.8.0。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
 
@@ -189,7 +191,7 @@ $env:GOOS='linux'; $env:GOARCH='loong64'; $env:CGO_ENABLED='0'; go build ./cmd/s
 - 教师导出课程统计：`POST /api/v1/teacher/courses/{courseID}/report-exports`
 - 教师查询/下载导出：`GET /api/v1/teacher/report-exports/{exportID}` 与 `/download`
 
-上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；MVP 解析以安全元信息和文本摘要为主，深度 Word/PDF/OCR 解析将在后续 worker 阶段补齐。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布；阶段 5 发布后的教师最终评价对学生可见且不可被后台初评覆盖。阶段 6 的 HTML 报表是规范归档源，CSV 带 UTF-8 BOM 便于 WPS/Excel/LibreOffice 打开；现已补齐课程跨实验统计与对应 CSV 导出。PDF 当前不引入未验证 native/浏览器依赖，按 LoongArch 风险策略记录为待配置。
+上传文件会计算 SHA-256、保存对象存储 key、登记附件元数据和创建 `submission_artifact_parse` 解析任务；当前实现已支持文本/Markdown 摘要、DOCX 正文摘要、PDF 基础文本摘要、截图尺寸和 ZIP 清单摘要。阶段 4 初评只生成教师复核用建议结果，不写最终成绩、不向学生发布；阶段 5 发布后的教师最终评价对学生可见且不可被后台初评覆盖。阶段 6 的 HTML 报表是规范归档源，CSV 带 UTF-8 BOM 便于 WPS/Excel/LibreOffice 打开；现已补齐课程跨实验统计，以及 CSV/XLSX/PDF 导出。PDF 使用纯 Go 生成与内嵌中文字体，不依赖目标机浏览器或 office 套件。
 
 开发态仍可在 `DEV_AUTH_BYPASS=true` 时使用请求头标识操作者：
 
@@ -218,6 +220,8 @@ npm run build
 - 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
 - Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
+- MVP 交付清单：`docs/MVP_DELIVERY.md`
+- UAT 检查单：`docs/UAT_CHECKLIST.md`
 - 部署助手与上下文工程：`docs/DEPLOYMENT_ASSISTANT.md`
 - 容器次级交付：`docs/CONTAINER_RUNTIME.md`
 - 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`

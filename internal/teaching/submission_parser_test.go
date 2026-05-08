@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
+	"github.com/phpdave11/gofpdf"
 )
 
 func TestInspectZipRejectsPathTraversal(t *testing.T) {
@@ -179,6 +180,84 @@ func TestStoreUploadedArtifactExtractsImageMetadata(t *testing.T) {
 	}
 	if metadata.Parser != "image_metadata" || metadata.Extension != ".png" || metadata.Width != 3 || metadata.Height != 2 {
 		t.Fatalf("unexpected image metadata: %+v", metadata)
+	}
+}
+
+func TestStoreUploadedArtifactExtractsDOCXMetadataAndText(t *testing.T) {
+	store := storage.NewLocal(t.TempDir())
+	if err := store.Ensure(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{}, WithArtifactStore(store), WithUploadLimits(1024*1024, 2))
+	docxBuffer := &bytes.Buffer{}
+	writer := zip.NewWriter(docxBuffer)
+	entry, err := writer.Create("word/document.xml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	xmlBody := `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>实验报告</w:t></w:r></w:p><w:p><w:r><w:t>步骤一 完成部署验证</w:t></w:r></w:p><w:tbl><w:tr><w:tc><w:p><w:r><w:t>表格项</w:t></w:r></w:p></w:tc></w:tr></w:tbl></w:body></w:document>`
+	if _, err := entry.Write([]byte(xmlBody)); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := service.storeUploadedArtifact(ArtifactUploadInput{
+		FileName: "report.docx",
+		Reader:   bytes.NewReader(docxBuffer.Bytes()),
+	}, "artifact-docx", "submission-1")
+	if err != nil {
+		t.Fatalf("storeUploadedArtifact for docx failed: %v", err)
+	}
+	if stored.TextExcerpt == "" || !strings.Contains(stored.TextExcerpt, "部署验证") {
+		t.Fatalf("expected docx excerpt to contain parsed text, got %q", stored.TextExcerpt)
+	}
+	var metadata struct {
+		Parser         string `json:"parser"`
+		ParagraphCount int    `json:"paragraph_count"`
+		TableCount     int    `json:"table_count"`
+	}
+	if err := json.Unmarshal(stored.Metadata, &metadata); err != nil {
+		t.Fatalf("docx metadata should be valid JSON: %v", err)
+	}
+	if metadata.Parser != "docx_text_excerpt" || metadata.ParagraphCount < 2 || metadata.TableCount != 1 {
+		t.Fatalf("unexpected docx metadata: %+v", metadata)
+	}
+}
+
+func TestStoreUploadedArtifactExtractsPDFText(t *testing.T) {
+	store := storage.NewLocal(t.TempDir())
+	if err := store.Ensure(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{}, WithArtifactStore(store), WithUploadLimits(1024*1024, 2))
+	pdfBuffer := &bytes.Buffer{}
+	pdfDoc := gofpdf.New("P", "mm", "A4", "")
+	pdfDoc.AddPage()
+	pdfDoc.SetFont("Helvetica", "", 16)
+	pdfDoc.Cell(40, 10, "Deployment result ok")
+	if err := pdfDoc.Output(pdfBuffer); err != nil {
+		t.Fatalf("build pdf fixture: %v", err)
+	}
+	stored, err := service.storeUploadedArtifact(ArtifactUploadInput{
+		FileName: "report.pdf",
+		Reader:   bytes.NewReader(pdfBuffer.Bytes()),
+	}, "artifact-pdf", "submission-1")
+	if err != nil {
+		t.Fatalf("storeUploadedArtifact for pdf failed: %v", err)
+	}
+	if stored.TextExcerpt == "" || !strings.Contains(strings.ToLower(stored.TextExcerpt), "deployment") {
+		t.Fatalf("expected pdf excerpt to contain extracted text, got %q", stored.TextExcerpt)
+	}
+	var metadata struct {
+		Parser    string `json:"parser"`
+		PageCount int    `json:"page_count"`
+	}
+	if err := json.Unmarshal(stored.Metadata, &metadata); err != nil {
+		t.Fatalf("pdf metadata should be valid JSON: %v", err)
+	}
+	if metadata.Parser != "pdf_text_excerpt" || metadata.PageCount != 1 {
+		t.Fatalf("unexpected pdf metadata: %+v", metadata)
 	}
 }
 

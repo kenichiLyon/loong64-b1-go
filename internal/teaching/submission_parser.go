@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,6 +22,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	pdf "rsc.io/pdf"
 )
 
 const (
@@ -272,17 +276,25 @@ func analyzeStoredArtifact(filePath string, kind ArtifactKind, ext, contentType 
 			metadata[key] = value
 		}
 	case ".docx":
-		summary, err := inspectZip(filePath)
+		summary, text, err := analyzeDOCX(filePath)
 		if err != nil {
 			return nil, "", err
 		}
-		metadata["parser"] = "docx_container_metadata"
+		excerpt = text
+		metadata["parser"] = "docx_text_excerpt"
 		for key, value := range summary {
 			metadata[key] = value
 		}
 	case ".pdf":
-		metadata["parser"] = "pdf_metadata_stub"
-		metadata["note"] = "deep PDF text extraction is deferred to the parsing worker"
+		summary, text, err := analyzePDF(filePath)
+		if err != nil {
+			return nil, "", err
+		}
+		excerpt = text
+		metadata["parser"] = "pdf_text_excerpt"
+		for key, value := range summary {
+			metadata[key] = value
+		}
 	case ".doc":
 		metadata["parser"] = "word_legacy_metadata_stub"
 		metadata["note"] = "legacy Word extraction is deferred to manual review or a target-safe parser"
@@ -356,6 +368,121 @@ func inspectZip(filePath string) (map[string]any, error) {
 		"sample_entries":     entries,
 		"extension_counts":   extCounts,
 	}, nil
+}
+
+func analyzeDOCX(filePath string) (map[string]any, string, error) {
+	summary, err := inspectZip(filePath)
+	if err != nil {
+		return nil, "", err
+	}
+	reader, err := zip.OpenReader(filePath)
+	if err != nil {
+		return nil, "", validationError("invalid docx container")
+	}
+	defer func() { _ = reader.Close() }()
+	document, err := docxDocumentXML(reader.File)
+	if err != nil {
+		return nil, "", validationError("docx document.xml is unavailable")
+	}
+	text, paragraphs, tables := extractDOCXText(document)
+	summary["paragraph_count"] = paragraphs
+	summary["table_count"] = tables
+	if strings.TrimSpace(text) != "" {
+		summary["excerpt_bytes"] = len(text)
+	}
+	return summary, text, nil
+}
+
+func docxDocumentXML(files []*zip.File) ([]byte, error) {
+	for _, file := range files {
+		if file.Name != "word/document.xml" {
+			continue
+		}
+		reader, err := file.Open()
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = reader.Close() }()
+		return io.ReadAll(io.LimitReader(reader, 4*1024*1024))
+	}
+	return nil, fs.ErrNotExist
+}
+
+func extractDOCXText(document []byte) (string, int, int) {
+	decoder := xml.NewDecoder(bytes.NewReader(document))
+	var parts []string
+	paragraphs := 0
+	tables := 0
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		switch start.Name.Local {
+		case "p":
+			paragraphs++
+		case "tbl":
+			tables++
+		case "t":
+			var text string
+			if err := decoder.DecodeElement(&text, &start); err == nil {
+				text = strings.TrimSpace(text)
+				if text != "" {
+					parts = append(parts, text)
+				}
+			}
+		}
+	}
+	return sanitizeEvidenceText(strings.Join(parts, " "), 1200), paragraphs, tables
+}
+
+func analyzePDF(filePath string) (map[string]any, string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, "", unavailableError("open pdf artifact", err)
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return nil, "", unavailableError("stat pdf artifact", err)
+	}
+	reader, err := pdf.NewReader(file, info.Size())
+	if err != nil {
+		return nil, "", validationError("invalid pdf document")
+	}
+	pageCount := reader.NumPage()
+	var parts []string
+	processedPages := 0
+	for pageNo := 1; pageNo <= pageCount && len(strings.Join(parts, "")) < 1200; pageNo++ {
+		page := reader.Page(pageNo)
+		if page.V.IsNull() {
+			continue
+		}
+		content := page.Content()
+		sort.Sort(pdf.TextVertical(content.Text))
+		var builder strings.Builder
+		for _, item := range content.Text {
+			builder.WriteString(item.S)
+		}
+		text := sanitizeEvidenceText(builder.String(), 800)
+		if strings.TrimSpace(text) != "" {
+			parts = append(parts, text)
+		}
+		processedPages++
+	}
+	excerpt := sanitizeEvidenceText(strings.Join(parts, "\n"), 1200)
+	summary := map[string]any{
+		"page_count":      pageCount,
+		"pages_processed": processedPages,
+	}
+	if strings.TrimSpace(excerpt) != "" {
+		summary["excerpt_bytes"] = len(excerpt)
+	}
+	return summary, excerpt, nil
 }
 
 func validateArchiveEntry(file *zip.File) error {
