@@ -12,6 +12,7 @@ type ReportFormat string
 const (
 	ReportFormatHTML ReportFormat = "html"
 	ReportFormatCSV  ReportFormat = "csv"
+	ReportFormatXLSX ReportFormat = "xlsx"
 	ReportFormatPDF  ReportFormat = "pdf"
 )
 

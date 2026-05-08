@@ -6,11 +6,18 @@ import type {
   AssistantSendMessageResult,
   AssistantToolCall,
   BootstrapCreateAdminResponse,
+  ClassRecord,
+  CourseRecord,
   BootstrapStatus,
   CourseReportSummary,
   ExperimentReportSummary,
+  ExperimentRecord,
   EvaluationResultDetail,
+  MetricRecord,
   ReportExport,
+  RubricTemplateRecord,
+  RubricVersionRecord,
+  RubricVersionWithMetrics,
   RuntimeConfigSummary,
   Submission,
   SubmissionDetail,
@@ -103,11 +110,99 @@ export class APIClient {
     return this.request('/api/v1/admin/users', options);
   }
 
+  async createUser(payload: { username: string; display_name: string; email?: string; student_no?: string; employee_no?: string; password?: string; roles: string[] }, options: RequestOptions): Promise<ActorProfile> {
+    return this.request('/api/v1/admin/users', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
   async setUserPassword(userID: string, password: string, options: RequestOptions): Promise<void> {
     return this.request(`/api/v1/admin/users/${encodeURIComponent(userID)}/password`, {
       ...options,
       method: 'PUT',
       body: JSON.stringify({ password }),
+    });
+  }
+
+  async createClass(payload: { code: string; name: string; grade_year?: number; major?: string }, options: RequestOptions): Promise<ClassRecord> {
+    return this.request('/api/v1/admin/classes', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createCourse(payload: { code: string; name: string; term: string }, options: RequestOptions): Promise<CourseRecord> {
+    return this.request('/api/v1/admin/courses', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async addCourseClass(courseID: string, classID: string, options: RequestOptions): Promise<void> {
+    return this.request(`/api/v1/admin/courses/${encodeURIComponent(courseID)}/classes`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify({ class_id: classID }),
+    });
+  }
+
+  async assignTeacher(courseID: string, teacherID: string, options: RequestOptions): Promise<void> {
+    return this.request(`/api/v1/admin/courses/${encodeURIComponent(courseID)}/teachers`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify({ teacher_id: teacherID }),
+    });
+  }
+
+  async enrollStudent(courseID: string, payload: { student_id: string; class_id?: string }, options: RequestOptions): Promise<void> {
+    return this.request(`/api/v1/admin/courses/${encodeURIComponent(courseID)}/enrollments`, {
+      ...options,
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createRubricTemplate(payload: { name: string; description?: string }, options: RequestOptions): Promise<RubricTemplateRecord> {
+    return this.request('/api/v1/teacher/rubric-templates', {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async createRubricVersion(templateID: string, payload: { weight_mode: string; metrics: Array<{ code: string; name: string; description?: string; weight_bps: number; max_score: number; sort_order: number }> }, options: RequestOptions): Promise<RubricVersionWithMetrics> {
+    return this.request(`/api/v1/teacher/rubric-templates/${encodeURIComponent(templateID)}/versions`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async publishRubricVersion(versionID: string, options: RequestOptions): Promise<RubricVersionRecord> {
+    return this.request(`/api/v1/teacher/rubric-template-versions/${encodeURIComponent(versionID)}/publish`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async createExperiment(courseID: string, payload: { title: string; description?: string; rubric_version_id: string; submission_spec?: Record<string, unknown> }, options: RequestOptions): Promise<ExperimentRecord> {
+    return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/experiments`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async publishExperiment(experimentID: string, options: RequestOptions): Promise<ExperimentRecord> {
+    return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/publish`, {
+      ...options,
+      method: 'POST',
+      body: JSON.stringify({}),
     });
   }
 
@@ -182,7 +277,7 @@ export class APIClient {
     return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/reports/summary`, options);
   }
 
-  async createSubmissionReportExport(submissionID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+  async createSubmissionReportExport(submissionID: string, format: 'html' | 'csv' | 'xlsx' | 'pdf', options: RequestOptions): Promise<ReportExport> {
     return this.request(`/api/v1/teacher/submissions/${encodeURIComponent(submissionID)}/report-exports`, {
       ...options,
       method: 'POST',
@@ -190,7 +285,7 @@ export class APIClient {
     });
   }
 
-  async createExperimentSummaryExport(experimentID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+  async createExperimentSummaryExport(experimentID: string, format: 'html' | 'csv' | 'xlsx' | 'pdf', options: RequestOptions): Promise<ReportExport> {
     return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/report-exports`, {
       ...options,
       method: 'POST',
@@ -202,7 +297,7 @@ export class APIClient {
     return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/reports/summary`, options);
   }
 
-  async createCourseSummaryExport(courseID: string, format: 'html' | 'csv' | 'pdf', options: RequestOptions): Promise<ReportExport> {
+  async createCourseSummaryExport(courseID: string, format: 'html' | 'csv' | 'xlsx' | 'pdf', options: RequestOptions): Promise<ReportExport> {
     return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/report-exports`, {
       ...options,
       method: 'POST',

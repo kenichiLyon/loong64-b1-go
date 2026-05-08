@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue';
 import AccountSecurityPanel from './components/AccountSecurityPanel.vue';
+import AdminSetupPanel from './components/AdminSetupPanel.vue';
 import BootstrapPanel from './components/BootstrapPanel.vue';
 import AdminUserPanel from './components/AdminUserPanel.vue';
 import DeploymentAssistantPanel from './components/DeploymentAssistantPanel.vue';
@@ -10,8 +11,9 @@ import ReportPanel from './components/ReportPanel.vue';
 import ReviewPanel from './components/ReviewPanel.vue';
 import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
+import TeacherSetupPanel from './components/TeacherSetupPanel.vue';
 import { api } from './lib/api';
-import type { ActorProfile, ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, CourseReportSummary, EvaluationResultDetail, ExperimentReportSummary, ReportExport, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorProfile, ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, ClassRecord, CourseRecord, CourseReportSummary, EvaluationResultDetail, ExperimentRecord, ExperimentReportSummary, ReportExport, RubricTemplateRecord, RubricVersionRecord, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -41,6 +43,11 @@ const bootstrapAssistant = ref<AssistantConversationDetail | null>(null);
 const deploymentAssistant = ref<AssistantConversationDetail | null>(null);
 const loggedIn = ref(false);
 const users = ref<ActorProfile[]>([]);
+const classes = ref<ClassRecord[]>([]);
+const courses = ref<CourseRecord[]>([]);
+const templates = ref<RubricTemplateRecord[]>([]);
+const versions = ref<RubricVersionRecord[]>([]);
+const experiments = ref<ExperimentRecord[]>([]);
 
 const requestOptions = computed(() => ({}));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -217,19 +224,19 @@ async function loadCourseSummary() {
   });
 }
 
-async function exportSubmissionReport(format: 'html' | 'csv' | 'pdf') {
+async function exportSubmissionReport(format: 'html' | 'csv' | 'xlsx' | 'pdf') {
   await runAction(`导出个人报告 ${format}`, async () => {
     exportResult.value = await api.createSubmissionReportExport(submissionID.value, format, requestOptions.value);
   });
 }
 
-async function exportExperimentSummary(format: 'html' | 'csv' | 'pdf') {
+async function exportExperimentSummary(format: 'html' | 'csv' | 'xlsx' | 'pdf') {
   await runAction(`导出实验统计 ${format}`, async () => {
     exportResult.value = await api.createExperimentSummaryExport(experimentID.value, format, requestOptions.value);
   });
 }
 
-async function exportCourseSummary(format: 'html' | 'csv' | 'pdf') {
+async function exportCourseSummary(format: 'html' | 'csv' | 'xlsx' | 'pdf') {
   await runAction(`导出课程统计 ${format}`, async () => {
     exportResult.value = await api.createCourseSummaryExport(courseID.value, format, requestOptions.value);
   });
@@ -251,6 +258,87 @@ async function loadUsers() {
   await runAction('读取用户列表', async () => {
     const response = await api.listUsers(requestOptions.value);
     users.value = response.items;
+  });
+}
+
+async function createUser(payload: { username: string; display_name: string; password?: string; email?: string; student_no?: string; employee_no?: string; roles: string[] }) {
+  await runAction('创建用户', async () => {
+    const created = await api.createUser(payload, requestOptions.value);
+    users.value = [created, ...users.value];
+  });
+}
+
+async function createClass(payload: { code: string; name: string; grade_year?: number; major?: string }) {
+  await runAction('创建班级', async () => {
+    const created = await api.createClass(payload, requestOptions.value);
+    classes.value = [created, ...classes.value];
+  });
+}
+
+async function createCourse(payload: { code: string; name: string; term: string }) {
+  await runAction('创建课程', async () => {
+    const created = await api.createCourse(payload, requestOptions.value);
+    courses.value = [created, ...courses.value];
+    courseID.value = created.id;
+  });
+}
+
+async function addCourseClass(payload: { courseID: string; classID: string }) {
+  await runAction('关联课程班级', async () => {
+    await api.addCourseClass(payload.courseID, payload.classID, requestOptions.value);
+    courseID.value = payload.courseID;
+  });
+}
+
+async function assignTeacher(payload: { courseID: string; teacherID: string }) {
+  await runAction('分配教师', async () => {
+    await api.assignTeacher(payload.courseID, payload.teacherID, requestOptions.value);
+    courseID.value = payload.courseID;
+  });
+}
+
+async function enrollStudent(payload: { courseID: string; studentID: string; classID?: string }) {
+  await runAction('登记选课', async () => {
+    await api.enrollStudent(payload.courseID, { student_id: payload.studentID, class_id: payload.classID }, requestOptions.value);
+    courseID.value = payload.courseID;
+  });
+}
+
+async function createTemplate(payload: { name: string; description?: string }) {
+  await runAction('创建模板', async () => {
+    const created = await api.createRubricTemplate(payload, requestOptions.value);
+    templates.value = [created, ...templates.value];
+  });
+}
+
+async function createVersion(payload: { templateID: string; weight_mode: string; metrics: Array<{ code: string; name: string; description?: string; weight_bps: number; max_score: number; sort_order: number }> }) {
+  await runAction('创建模板版本', async () => {
+    const created = await api.createRubricVersion(payload.templateID, { weight_mode: payload.weight_mode, metrics: payload.metrics }, requestOptions.value);
+    versions.value = [created.version, ...versions.value];
+  });
+}
+
+async function publishVersion(versionID: string) {
+  await runAction('发布模板版本', async () => {
+    const published = await api.publishRubricVersion(versionID, requestOptions.value);
+    versions.value = versions.value.map((item) => (item.id === published.id ? published : item));
+  });
+}
+
+async function createExperimentFromSetup(payload: { courseID: string; title: string; description?: string; rubric_version_id: string; submission_spec?: Record<string, unknown> }) {
+  await runAction('创建实验', async () => {
+    const created = await api.createExperiment(payload.courseID, payload, requestOptions.value);
+    experiments.value = [created, ...experiments.value];
+    courseID.value = payload.courseID;
+    experimentID.value = created.id;
+  });
+}
+
+async function publishExperimentFromSetup(experimentIDValue: string) {
+  await runAction('发布实验', async () => {
+    const published = await api.publishExperiment(experimentIDValue, requestOptions.value);
+    experiments.value = experiments.value.map((item) => (item.id === published.id ? published : item));
+    experimentID.value = published.id;
   });
 }
 
@@ -308,7 +396,9 @@ async function login(payload: { username: string; password: string }) {
     roles.value = me.roles;
     loggedIn.value = true;
     await loadRuntimeConfig();
-    await loadUsers();
+    if (me.roles.includes('admin')) {
+      await loadUsers();
+    }
   });
 }
 
@@ -340,6 +430,11 @@ function resetAuthenticatedState() {
   runtimeConfig.value = null;
   deploymentAssistant.value = null;
   users.value = [];
+  classes.value = [];
+  courses.value = [];
+  templates.value = [];
+  versions.value = [];
+  experiments.value = [];
   detail.value = null;
   evaluation.value = null;
   review.value = null;
@@ -415,6 +510,37 @@ onMounted(() => {
       v-if="bootstrapStatus?.initialized && loggedIn"
       :busy="busy"
       @change-password="changeOwnPassword"
+    />
+
+    <AdminSetupPanel
+      v-if="bootstrapStatus?.initialized && loggedIn && roles.includes('admin')"
+      :busy="busy"
+      :users="users"
+      :classes="classes"
+      :courses="courses"
+      @create-user="createUser"
+      @create-class="createClass"
+      @create-course="createCourse"
+      @add-course-class="addCourseClass"
+      @assign-teacher="assignTeacher"
+      @enroll-student="enrollStudent"
+    />
+
+    <TeacherSetupPanel
+      v-if="bootstrapStatus?.initialized && loggedIn && (roles.includes('teacher') || roles.includes('admin'))"
+      :busy="busy"
+      :courses="courses"
+      :templates="templates"
+      :versions="versions"
+      :experiments="experiments"
+      :active-course-id="courseID"
+      @create-template="createTemplate"
+      @create-version="createVersion"
+      @publish-version="publishVersion"
+      @create-experiment="createExperimentFromSetup"
+      @publish-experiment="publishExperimentFromSetup"
+      @select-course="courseID = $event"
+      @select-experiment="experimentID = $event"
     />
 
     <RuntimeConfigPanel

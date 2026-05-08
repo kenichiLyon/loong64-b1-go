@@ -5,6 +5,75 @@ export interface ActorProfile {
   roles: ActorRole[];
   username?: string;
   display_name?: string;
+  email?: string;
+  student_no?: string;
+  employee_no?: string;
+  status?: string;
+}
+
+export interface ClassRecord {
+  id: string;
+  code: string;
+  name: string;
+  grade_year?: number;
+  major?: string;
+  status: string;
+}
+
+export interface CourseRecord {
+  id: string;
+  code: string;
+  name: string;
+  term: string;
+  status: string;
+  created_by?: string;
+}
+
+export interface MetricRecord {
+  id: string;
+  version_id?: string;
+  code: string;
+  name: string;
+  description?: string;
+  weight_bps: number;
+  max_score: number;
+  sort_order: number;
+}
+
+export interface RubricTemplateRecord {
+  id: string;
+  name: string;
+  description?: string;
+  owner_id: string;
+  scope: string;
+  status: string;
+}
+
+export interface RubricVersionRecord {
+  id: string;
+  template_id: string;
+  version_no: number;
+  status: string;
+  weight_mode: string;
+  total_weight_bps: number;
+  published_at?: string;
+}
+
+export interface RubricVersionWithMetrics {
+  version: RubricVersionRecord;
+  metrics: MetricRecord[];
+}
+
+export interface ExperimentRecord {
+  id: string;
+  course_id: string;
+  title: string;
+  description?: string;
+  rubric_version_id: string;
+  status: string;
+  start_at?: string;
+  due_at?: string;
+  published_at?: string;
 }
 
 export interface Submission {
@@ -181,7 +250,7 @@ export interface ReportExport {
   report_type: 'submission_report' | 'experiment_summary' | 'course_summary';
   scope_type: 'submission' | 'experiment' | 'course';
   scope_id: string;
-  format: 'html' | 'csv' | 'pdf';
+  format: 'html' | 'csv' | 'xlsx' | 'pdf';
   status: 'queued' | 'running' | 'succeeded' | 'failed';
   storage_key?: string;
   sha256_hex?: string;
