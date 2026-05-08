@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"errors"
 	"net/http"
@@ -14,6 +15,12 @@ import (
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+)
+
+const (
+	defaultSessionCookieName = "loong64_b1_session"
+	defaultCSRFCookieName    = "loong64_b1_csrf"
+	defaultSessionTTL        = 168 * time.Hour
 )
 
 type UserAuth struct {
@@ -94,7 +101,7 @@ func (s *Service) createSession(ctx context.Context, user UserAuth) (Session, st
 		ID:         teaching.NewID("ses"),
 		UserID:     user.ID,
 		TokenHash:  tokenHash,
-		ExpiresAt:  now.Add(s.cfg.SessionTTL),
+		ExpiresAt:  now.Add(s.sessionTTL()),
 		LastSeenAt: now,
 		User:       user,
 	}
@@ -109,7 +116,7 @@ func (s *Service) ResolveRequestActor(ctx context.Context, r *http.Request) (tea
 	if s == nil || s.repo == nil {
 		return teaching.Actor{}, unavailableError("auth service is not configured", nil)
 	}
-	cookie, err := r.Cookie(s.cfg.SessionCookieName)
+	cookie, err := r.Cookie(s.sessionCookieName())
 	if err != nil {
 		return teaching.Actor{}, unauthorizedError("session cookie is required")
 	}
@@ -130,29 +137,58 @@ func (s *Service) ResolveRequestActor(ctx context.Context, r *http.Request) (tea
 }
 
 func (s *Service) Logout(ctx context.Context, r *http.Request) error {
-	cookie, err := r.Cookie(s.cfg.SessionCookieName)
+	cookie, err := r.Cookie(s.sessionCookieName())
 	if err != nil {
 		return nil
 	}
 	return s.repo.DeleteSessionByTokenHash(ctx, hashToken(cookie.Value))
 }
 
+func (s *Service) ValidateCSRF(r *http.Request) error {
+	if s == nil || !csrfProtectedMethod(r.Method) {
+		return nil
+	}
+	if _, err := r.Cookie(s.sessionCookieName()); err != nil {
+		return nil
+	}
+	csrfCookie, err := r.Cookie(s.csrfCookieName())
+	if err != nil {
+		return forbiddenError("csrf cookie is required")
+	}
+	headerToken := strings.TrimSpace(r.Header.Get("X-CSRF-Token"))
+	if headerToken == "" {
+		return forbiddenError("csrf token is required")
+	}
+	if subtle.ConstantTimeCompare([]byte(headerToken), []byte(strings.TrimSpace(csrfCookie.Value))) != 1 {
+		return forbiddenError("csrf token is invalid")
+	}
+	return nil
+}
+
+func (s *Service) NewCSRFCookieValue() (string, error) {
+	token, _, err := newSessionToken()
+	if err != nil {
+		return "", unavailableError("failed to create csrf token", err)
+	}
+	return token, nil
+}
+
 func (s *Service) WriteSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     s.cfg.SessionCookieName,
+		Name:     s.sessionCookieName(),
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Secure:   s.cfg.SessionSecureCookie,
-		Expires:  time.Now().UTC().Add(s.cfg.SessionTTL),
-		MaxAge:   int(s.cfg.SessionTTL.Seconds()),
+		Expires:  time.Now().UTC().Add(s.sessionTTL()),
+		MaxAge:   int(s.sessionTTL().Seconds()),
 	})
 }
 
 func (s *Service) ClearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     s.cfg.SessionCookieName,
+		Name:     s.sessionCookieName(),
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
@@ -161,6 +197,62 @@ func (s *Service) ClearSessionCookie(w http.ResponseWriter) {
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
 	})
+}
+
+func (s *Service) WriteCSRFCookie(w http.ResponseWriter, token string) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     s.csrfCookieName(),
+		Value:    token,
+		Path:     "/",
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cfg.SessionSecureCookie,
+		Expires:  time.Now().UTC().Add(s.sessionTTL()),
+		MaxAge:   int(s.sessionTTL().Seconds()),
+	})
+}
+
+func (s *Service) ClearCSRFCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     s.csrfCookieName(),
+		Value:    "",
+		Path:     "/",
+		HttpOnly: false,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.cfg.SessionSecureCookie,
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+	})
+}
+
+func (s *Service) sessionCookieName() string {
+	if s != nil && strings.TrimSpace(s.cfg.SessionCookieName) != "" {
+		return strings.TrimSpace(s.cfg.SessionCookieName)
+	}
+	return defaultSessionCookieName
+}
+
+func (s *Service) csrfCookieName() string {
+	if s != nil && strings.TrimSpace(s.cfg.CSRFCookieName) != "" {
+		return strings.TrimSpace(s.cfg.CSRFCookieName)
+	}
+	return defaultCSRFCookieName
+}
+
+func (s *Service) sessionTTL() time.Duration {
+	if s != nil && s.cfg.SessionTTL > 0 {
+		return s.cfg.SessionTTL
+	}
+	return defaultSessionTTL
+}
+
+func csrfProtectedMethod(method string) bool {
+	switch method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
 }
 
 func HashPassword(password string) (string, error) {

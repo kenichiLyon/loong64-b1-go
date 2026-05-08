@@ -22,6 +22,7 @@ npm run dev
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:8080
+VITE_CSRF_COOKIE_NAME=loong64_b1_csrf
 ```
 
 ## 构建

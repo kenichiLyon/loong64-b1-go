@@ -93,6 +93,9 @@ func (h *bootstrapHandler) createAdmin(w http.ResponseWriter, r *http.Request) {
 	if h.authService != nil {
 		if session, token, err := h.authService.CreateSessionForUser(r.Context(), user.ID); err == nil {
 			h.authService.WriteSessionCookie(w, token)
+			if csrfToken, err := h.authService.NewCSRFCookieValue(); err == nil {
+				h.authService.WriteCSRFCookie(w, csrfToken)
+			}
 			httpx.WriteJSON(w, http.StatusCreated, map[string]any{
 				"user":    user,
 				"roles":   session.User.Roles,

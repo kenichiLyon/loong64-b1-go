@@ -28,6 +28,7 @@ type Config struct {
 	AutoMigrate               bool
 	DevAuthBypass             bool
 	SessionCookieName         string
+	CSRFCookieName            string
 	SessionTTL                time.Duration
 	SessionSecureCookie       bool
 	MaxUploadBytes            int64
@@ -91,6 +92,7 @@ func Load() Config {
 		AutoMigrate:               autoMigrate,
 		DevAuthBypass:             boolFromEnv("DEV_AUTH_BYPASS", false),
 		SessionCookieName:         getenv("SESSION_COOKIE_NAME", "loong64_b1_session"),
+		CSRFCookieName:            getenv("CSRF_COOKIE_NAME", "loong64_b1_csrf"),
 		SessionTTL:                durationFromEnv("SESSION_TTL", 168*time.Hour),
 		SessionSecureCookie:       boolFromEnv("SESSION_SECURE_COOKIE", getenv("APP_ENV", "development") == "production"),
 		MaxUploadBytes:            int64FromEnv("MAX_UPLOAD_BYTES", 50*1024*1024),
