@@ -23,6 +23,8 @@ export interface RequestOptions extends RequestInit {
   roles?: string[];
 }
 
+const csrfCookieName = import.meta.env.VITE_CSRF_COOKIE_NAME ?? 'loong64_b1_csrf';
+
 export class APIClient {
   constructor(private readonly baseURL = '') {}
 
@@ -246,6 +248,7 @@ export class APIClient {
 
   private async request<T>(path: string, options: RequestOptions): Promise<T> {
     const headers = new Headers(options.headers);
+    const method = (options.method ?? 'GET').toUpperCase();
     if (options.actorID) {
       headers.set('X-Actor-ID', options.actorID);
     }
@@ -254,6 +257,12 @@ export class APIClient {
     }
     if (options.body && !(options.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
+    }
+    if (csrfProtectedMethod(method)) {
+      const csrfToken = readCookie(csrfCookieName);
+      if (csrfToken !== '') {
+        headers.set('X-CSRF-Token', csrfToken);
+      }
     }
     const response = await fetch(`${this.baseURL}${path}`, { ...options, headers });
     if (!response.ok) {
@@ -265,6 +274,19 @@ export class APIClient {
     }
     return (await response.json()) as T;
   }
+}
+
+function csrfProtectedMethod(method: string): boolean {
+  return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
+}
+
+function readCookie(name: string): string {
+  if (typeof document === 'undefined' || document.cookie === '') {
+    return '';
+  }
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = document.cookie.match(new RegExp(`(?:^|; )${escaped}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : '';
 }
 
 export const api = new APIClient(import.meta.env.VITE_API_BASE_URL ?? '');
