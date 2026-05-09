@@ -135,6 +135,9 @@ type Repository interface {
 	CreateUser(context.Context, User, []Role, AuditEntry) (User, error)
 	CountUsers(context.Context) (int, error)
 	ListUsers(context.Context, int) ([]User, error)
+	ListClasses(context.Context, int) ([]Class, error)
+	ListCourses(context.Context, int) ([]Course, error)
+	ListCoursesForTeacher(context.Context, string, int) ([]Course, error)
 	SetUserRoles(context.Context, string, []Role, AuditEntry) error
 	SetUserPassword(context.Context, string, string, AuditEntry) error
 	UserHasRole(context.Context, string, Role) (bool, error)
@@ -145,8 +148,10 @@ type Repository interface {
 	AssignTeacher(context.Context, CourseTeacher, AuditEntry) error
 	EnrollStudent(context.Context, Enrollment, AuditEntry) error
 	CreateRubricTemplate(context.Context, RubricTemplate, AuditEntry) (RubricTemplate, error)
+	ListRubricTemplates(context.Context, string, int) ([]RubricTemplate, error)
 	RubricTemplateOwner(context.Context, string) (string, error)
 	CreateRubricVersion(context.Context, RubricTemplateVersion, []Metric, AuditEntry) (RubricTemplateVersion, []Metric, error)
+	ListRubricVersions(context.Context, string, int) ([]RubricTemplateVersion, error)
 	RubricVersionOwner(context.Context, string) (string, error)
 	PublishRubricVersion(context.Context, string, AuditEntry) (RubricTemplateVersion, error)
 	RubricVersionStatus(context.Context, string) (string, error)
@@ -155,12 +160,14 @@ type Repository interface {
 	PublishExperiment(context.Context, string, AuditEntry) (Experiment, error)
 	ExperimentSubmissionAccess(context.Context, string, string) (ExperimentSubmissionAccess, error)
 	ListExperimentsForCourse(context.Context, string, int) ([]Experiment, error)
+	ListStudentExperiments(context.Context, string, int) ([]Experiment, error)
 	CreateSubmission(context.Context, Submission, AuditEntry) (Submission, error)
 	StudentOwnsSubmission(context.Context, string, string) (bool, error)
 	SubmissionCourseID(context.Context, string) (string, error)
 	SubmissionArtifactCount(context.Context, string) (int, error)
 	CreateArtifact(context.Context, Artifact, ExtractedContent, *QueuedJob, AuditEntry) (ArtifactWithExtraction, error)
 	ListSubmissionsForExperiment(context.Context, string, int) ([]Submission, error)
+	ListSubmissionsForStudent(context.Context, string, string, int) ([]Submission, error)
 	GetSubmissionDetail(context.Context, string) (SubmissionDetail, error)
 	GetEvaluationContext(context.Context, string) (EvaluationContext, error)
 	CreateInitialEvaluation(context.Context, EvaluationResult, []RuleCheckFinding, []MetricScore, *LLMCallLog, AuditEntry) (EvaluationResultDetail, error)
@@ -296,6 +303,40 @@ func (s *Service) ListUsers(ctx context.Context, actor Actor, limit int) ([]User
 		return nil, err
 	}
 	return s.repo.ListUsers(ctx, clampLimit(limit))
+}
+
+func (s *Service) ListClasses(ctx context.Context, actor Actor, limit int) ([]Class, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	if err := actor.Require(RoleAdmin); err != nil {
+		return nil, err
+	}
+	return s.repo.ListClasses(ctx, clampLimit(limit))
+}
+
+func (s *Service) ListCourses(ctx context.Context, actor Actor, limit int) ([]Course, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	if err := actor.Require(RoleAdmin); err != nil {
+		return nil, err
+	}
+	return s.repo.ListCourses(ctx, clampLimit(limit))
+}
+
+func (s *Service) ListTeacherCourses(ctx context.Context, actor Actor, limit int) ([]Course, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	switch {
+	case actor.Has(RoleAdmin):
+		return s.repo.ListCourses(ctx, clampLimit(limit))
+	case actor.Has(RoleTeacher):
+		return s.repo.ListCoursesForTeacher(ctx, actor.ID, clampLimit(limit))
+	default:
+		return nil, forbiddenError("teacher or admin role is required")
+	}
 }
 
 func (s *Service) GetBootstrapStatus(ctx context.Context) (BootstrapStatus, error) {
@@ -538,6 +579,20 @@ func (s *Service) CreateRubricTemplate(ctx context.Context, actor Actor, input C
 	return s.repo.CreateRubricTemplate(ctx, template, audit)
 }
 
+func (s *Service) ListRubricTemplates(ctx context.Context, actor Actor, limit int) ([]RubricTemplate, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	switch {
+	case actor.Has(RoleAdmin):
+		return s.repo.ListRubricTemplates(ctx, "", clampLimit(limit))
+	case actor.Has(RoleTeacher):
+		return s.repo.ListRubricTemplates(ctx, actor.ID, clampLimit(limit))
+	default:
+		return nil, forbiddenError("teacher or admin role is required")
+	}
+}
+
 type CreateRubricVersionInput struct {
 	WeightMode string        `json:"weight_mode"`
 	Metrics    []MetricInput `json:"metrics"`
@@ -587,6 +642,29 @@ func (s *Service) CreateRubricVersion(ctx context.Context, actor Actor, template
 		return RubricVersionWithMetrics{}, err
 	}
 	return RubricVersionWithMetrics{Version: createdVersion, Metrics: createdMetrics}, nil
+}
+
+func (s *Service) ListRubricVersions(ctx context.Context, actor Actor, templateID string, limit int) ([]RubricTemplateVersion, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	templateID = strings.TrimSpace(templateID)
+	if templateID == "" {
+		return nil, validationError("template_id is required")
+	}
+	if !actor.Has(RoleTeacher) && !actor.Has(RoleAdmin) {
+		return nil, forbiddenError("teacher or admin role is required")
+	}
+	if !actor.Has(RoleAdmin) {
+		ownerID, err := s.repo.RubricTemplateOwner(ctx, templateID)
+		if err != nil {
+			return nil, err
+		}
+		if ownerID != actor.ID {
+			return nil, forbiddenError("teacher can only view owned rubric templates")
+		}
+	}
+	return s.repo.ListRubricVersions(ctx, templateID, clampLimit(limit))
 }
 
 func (s *Service) PublishRubricVersion(ctx context.Context, actor Actor, versionID string, audit AuditEntry) (RubricTemplateVersion, error) {
@@ -683,6 +761,40 @@ func (s *Service) PublishExperiment(ctx context.Context, actor Actor, experiment
 	audit.TargetType = "experiment"
 	audit.TargetID = experimentID
 	return s.repo.PublishExperiment(ctx, strings.TrimSpace(experimentID), audit)
+}
+
+func (s *Service) ListExperimentsForCourse(ctx context.Context, actor Actor, courseID string, limit int) ([]Experiment, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	courseID = strings.TrimSpace(courseID)
+	if courseID == "" {
+		return nil, validationError("course_id is required")
+	}
+	switch {
+	case actor.Has(RoleAdmin):
+	case actor.Has(RoleTeacher):
+		allowed, err := s.repo.TeacherCanEditCourse(ctx, courseID, actor.ID)
+		if err != nil {
+			return nil, err
+		}
+		if !allowed {
+			return nil, forbiddenError("teacher is not assigned to this course")
+		}
+	default:
+		return nil, forbiddenError("teacher or admin role is required")
+	}
+	return s.repo.ListExperimentsForCourse(ctx, courseID, clampLimit(limit))
+}
+
+func (s *Service) ListStudentExperiments(ctx context.Context, actor Actor, limit int) ([]Experiment, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	if err := actor.Require(RoleStudent); err != nil {
+		return nil, err
+	}
+	return s.repo.ListStudentExperiments(ctx, actor.ID, clampLimit(limit))
 }
 
 func (s *Service) ready() error {

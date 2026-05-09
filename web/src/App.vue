@@ -48,6 +48,8 @@ const courses = ref<CourseRecord[]>([]);
 const templates = ref<RubricTemplateRecord[]>([]);
 const versions = ref<RubricVersionRecord[]>([]);
 const experiments = ref<ExperimentRecord[]>([]);
+const studentExperiments = ref<ExperimentRecord[]>([]);
+const studentSubmissions = ref<Submission[]>([]);
 
 const requestOptions = computed(() => ({}));
 const exportDownloadURL = computed(() => (exportResult.value ? api.reportExportDownloadURL(exportResult.value.id) : ''));
@@ -70,6 +72,7 @@ async function createSubmission() {
   await runAction('创建提交', async () => {
     const submission = await api.createSubmission(experimentID.value, requestOptions.value);
     submissionID.value = submission.id;
+    await loadStudentSubmissions();
     await loadStudentSubmission();
   });
 }
@@ -157,6 +160,9 @@ async function listSubmissions() {
   await runAction('读取提交列表', async () => {
     const response = await api.listExperimentSubmissions(experimentID.value, requestOptions.value);
     submissions.value = response.items;
+    if (!submissionID.value && response.items[0]) {
+      submissionID.value = response.items[0].id;
+    }
   });
 }
 
@@ -171,6 +177,62 @@ async function loadStudentSubmission() {
   await runAction('读取学生提交详情', async () => {
     detail.value = await api.getSubmission(submissionID.value, 'student', requestOptions.value);
   });
+}
+
+async function loadClasses() {
+  const response = await api.listClasses(requestOptions.value);
+  classes.value = response.items;
+}
+
+async function loadCourses() {
+  const response = await api.listCourses(requestOptions.value);
+  courses.value = response.items;
+  if (!courseID.value && response.items[0]) {
+    courseID.value = response.items[0].id;
+  }
+}
+
+async function loadTeacherCourses() {
+  const response = await api.listTeacherCourses(requestOptions.value);
+  courses.value = response.items;
+  if (!courseID.value && response.items[0]) {
+    courseID.value = response.items[0].id;
+  }
+}
+
+async function loadTemplates() {
+  const response = await api.listRubricTemplates(requestOptions.value);
+  templates.value = response.items;
+  const versionResponses = await Promise.all(response.items.map((item) => api.listRubricVersions(item.id, requestOptions.value)));
+  versions.value = versionResponses.flatMap((item) => item.items);
+}
+
+async function loadExperimentsForCourse() {
+  if (!courseID.value) {
+    experiments.value = [];
+    return;
+  }
+  const response = await api.listTeacherExperiments(courseID.value, requestOptions.value);
+  experiments.value = response.items;
+  if (!experimentID.value && response.items[0]) {
+    experimentID.value = response.items[0].id;
+  }
+}
+
+async function loadStudentExperiments() {
+  const response = await api.listStudentExperiments(requestOptions.value);
+  studentExperiments.value = response.items;
+  if (!experimentID.value && response.items[0]) {
+    experimentID.value = response.items[0].id;
+  }
+}
+
+async function loadStudentSubmissions() {
+  const response = await api.listStudentSubmissions(experimentID.value, requestOptions.value);
+  studentSubmissions.value = response.items;
+  if (!submissionID.value && response.items[0]) {
+    submissionID.value = response.items[0].id;
+  }
 }
 
 async function runEvaluation() {
@@ -395,10 +457,7 @@ async function login(payload: { username: string; password: string }) {
     actorID.value = me.id;
     roles.value = me.roles;
     loggedIn.value = true;
-    await loadRuntimeConfig();
-    if (me.roles.includes('admin')) {
-      await loadUsers();
-    }
+    await loadWorkspace();
   });
 }
 
@@ -435,6 +494,8 @@ function resetAuthenticatedState() {
   templates.value = [];
   versions.value = [];
   experiments.value = [];
+  studentExperiments.value = [];
+  studentSubmissions.value = [];
   detail.value = null;
   evaluation.value = null;
   review.value = null;
@@ -442,6 +503,63 @@ function resetAuthenticatedState() {
   summary.value = null;
   courseSummary.value = null;
   exportResult.value = null;
+  courseID.value = '';
+  experimentID.value = '';
+  submissionID.value = '';
+}
+
+async function loadWorkspace() {
+  if (!loggedIn.value) {
+    return;
+  }
+  if (roles.value.includes('admin')) {
+    await Promise.all([loadUsers(), loadClasses(), loadCourses(), loadRuntimeConfig(), loadTemplates()]);
+    await loadExperimentsForCourse();
+    return;
+  }
+  if (roles.value.includes('teacher')) {
+    await Promise.all([loadTeacherCourses(), loadTemplates()]);
+    await loadExperimentsForCourse();
+    return;
+  }
+  if (roles.value.includes('student')) {
+    await loadStudentExperiments();
+    await loadStudentSubmissions();
+  }
+}
+
+async function selectCourse(value: string) {
+  courseID.value = value;
+  experimentID.value = '';
+  submissionID.value = '';
+  submissions.value = [];
+  studentSubmissions.value = [];
+  detail.value = null;
+  evaluation.value = null;
+  review.value = null;
+  report.value = null;
+  summary.value = null;
+  courseSummary.value = null;
+  await runAction('加载课程实验', async () => {
+    await loadExperimentsForCourse();
+  });
+}
+
+async function selectExperiment(value: string) {
+  experimentID.value = value;
+  submissionID.value = '';
+  detail.value = null;
+  evaluation.value = null;
+  review.value = null;
+  report.value = null;
+  summary.value = null;
+  if (roles.value.includes('student')) {
+    await runAction('加载学生提交列表', async () => {
+      await loadStudentSubmissions();
+    });
+    return;
+  }
+  await listSubmissions();
 }
 
 onMounted(() => {
@@ -449,8 +567,8 @@ onMounted(() => {
     await loadBootstrapStatus();
     if (bootstrapStatus.value?.initialized) {
       await loadCurrentUser();
-      if (loggedIn.value && roles.value.includes('admin')) {
-        await loadUsers();
+      if (loggedIn.value) {
+        await loadWorkspace();
       }
     }
   })();
@@ -539,8 +657,8 @@ onMounted(() => {
       @publish-version="publishVersion"
       @create-experiment="createExperimentFromSetup"
       @publish-experiment="publishExperimentFromSetup"
-      @select-course="courseID = $event"
-      @select-experiment="experimentID = $event"
+      @select-course="selectCourse"
+      @select-experiment="selectExperiment"
     />
 
     <RuntimeConfigPanel
@@ -574,22 +692,29 @@ onMounted(() => {
     <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="workspace-grid">
       <section class="card flow-card student-flow">
         <p class="eyebrow">学生流程</p>
-        <h2>创建提交与上传成果</h2>
+        <h2>选择任务、提交成果并查看结果</h2>
         <label>
-          课程 ID
-          <input v-model="courseID" placeholder="crs_xxx" />
+          可提交实验
+          <select v-model="experimentID" @change="selectExperiment(($event.target as HTMLSelectElement).value)">
+            <option value="">选择实验</option>
+            <option v-for="item in studentExperiments" :key="item.id" :value="item.id">
+              {{ item.title }} · {{ item.status }}
+            </option>
+          </select>
         </label>
         <label>
-          实验 ID
-          <input v-model="experimentID" placeholder="exp_xxx" />
-        </label>
-        <label>
-          提交 ID
-          <input v-model="submissionID" placeholder="sub_xxx" />
+          我的提交
+          <select v-model="submissionID">
+            <option value="">选择提交</option>
+            <option v-for="item in studentSubmissions" :key="item.id" :value="item.id">
+              {{ item.id }} · {{ item.status }} · attempt {{ item.attempt_no }}
+            </option>
+          </select>
         </label>
         <div class="button-row">
           <button :disabled="busy || !experimentID" @click="createSubmission">创建提交</button>
           <button :disabled="busy || !submissionID" @click="loadStudentSubmission">读取提交</button>
+          <button :disabled="busy || !submissionID" @click="loadReview('student')">读取已发布评价</button>
         </div>
         <label>
           成果类型
@@ -619,10 +744,24 @@ onMounted(() => {
 
       <section class="card flow-card teacher-flow">
         <p class="eyebrow">教师流程</p>
-        <h2>核查、初评与发布</h2>
+        <h2>选择课程、实验和提交后复核发布</h2>
         <label>
-          实验 ID
-          <input v-model="experimentID" placeholder="exp_xxx" />
+          课程
+          <select v-model="courseID" @change="selectCourse(($event.target as HTMLSelectElement).value)">
+            <option value="">选择课程</option>
+            <option v-for="course in courses" :key="course.id" :value="course.id">
+              {{ course.name }} · {{ course.term }}
+            </option>
+          </select>
+        </label>
+        <label>
+          实验
+          <select v-model="experimentID" @change="selectExperiment(($event.target as HTMLSelectElement).value)">
+            <option value="">选择实验</option>
+            <option v-for="item in experiments" :key="item.id" :value="item.id">
+              {{ item.title }} · {{ item.status }}
+            </option>
+          </select>
         </label>
         <button :disabled="busy || !experimentID" @click="listSubmissions">查看提交列表</button>
         <div class="submission-list">
@@ -631,8 +770,13 @@ onMounted(() => {
           </button>
         </div>
         <label>
-          提交 ID
-          <input v-model="submissionID" placeholder="sub_xxx" />
+          当前提交
+          <select v-model="submissionID">
+            <option value="">选择提交</option>
+            <option v-for="item in submissions" :key="item.id" :value="item.id">
+              {{ item.id }} · {{ item.student_id }} · {{ item.status }}
+            </option>
+          </select>
         </label>
         <div class="button-row">
           <button :disabled="busy || !submissionID" @click="loadTeacherSubmission()">读取详情</button>
@@ -677,7 +821,7 @@ onMounted(() => {
     <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="card published-card">
       <p class="eyebrow">学生查看发布结果</p>
       <h2>发布后反馈</h2>
-      <p>切换为学生角色并输入自己的提交 ID 后，可读取教师发布的最终评价。</p>
+      <p>学生现在可以直接从实验和提交下拉框中选择自己的记录，不再依赖手工填写 ID。</p>
       <button :disabled="busy || !submissionID" @click="loadReview('student')">读取已发布评价</button>
     </section>
   </main>

@@ -33,6 +33,8 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	h := &HTTPHandler{service: deps.Service, appEnv: deps.AppEnv, logger: deps.Logger, devAuthBypass: deps.DevAuthBypass, resolveActor: deps.ResolveActor}
 	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("GET /api/v1/admin/users", h.listUsers)
+	mux.HandleFunc("GET /api/v1/admin/classes", h.listClasses)
+	mux.HandleFunc("GET /api/v1/admin/courses", h.listCourses)
 	mux.HandleFunc("POST /api/v1/admin/users", h.createUser)
 	mux.HandleFunc("PUT /api/v1/admin/users/{userID}/roles", h.setUserRoles)
 	mux.HandleFunc("PUT /api/v1/admin/users/{userID}/password", h.setUserPassword)
@@ -41,12 +43,18 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/classes", h.addCourseClass)
 	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/teachers", h.assignTeacher)
 	mux.HandleFunc("PUT /api/v1/admin/courses/{courseID}/enrollments", h.enrollStudent)
+	mux.HandleFunc("GET /api/v1/teacher/courses", h.listTeacherCourses)
+	mux.HandleFunc("GET /api/v1/teacher/rubric-templates", h.listRubricTemplates)
 	mux.HandleFunc("POST /api/v1/teacher/rubric-templates", h.createRubricTemplate)
+	mux.HandleFunc("GET /api/v1/teacher/rubric-templates/{templateID}/versions", h.listRubricVersions)
 	mux.HandleFunc("POST /api/v1/teacher/rubric-templates/{templateID}/versions", h.createRubricVersion)
 	mux.HandleFunc("POST /api/v1/teacher/rubric-template-versions/{versionID}/publish", h.publishRubricVersion)
+	mux.HandleFunc("GET /api/v1/teacher/courses/{courseID}/experiments", h.listCourseExperiments)
 	mux.HandleFunc("POST /api/v1/teacher/courses/{courseID}/experiments", h.createExperiment)
 	mux.HandleFunc("POST /api/v1/teacher/experiments/{experimentID}/publish", h.publishExperiment)
+	mux.HandleFunc("GET /api/v1/student/experiments", h.listStudentExperiments)
 	mux.HandleFunc("POST /api/v1/student/experiments/{experimentID}/submissions", h.createSubmission)
+	mux.HandleFunc("GET /api/v1/student/submissions", h.listStudentSubmissions)
 	mux.HandleFunc("POST /api/v1/student/submissions/{submissionID}/artifacts", h.uploadArtifact)
 	mux.HandleFunc("POST /api/v1/student/submissions/{submissionID}/artifact-links", h.createGitLinkArtifact)
 	mux.HandleFunc("GET /api/v1/student/submissions/{submissionID}", h.getSubmissionDetail)
@@ -91,6 +99,36 @@ func (h *HTTPHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": users})
+}
+
+func (h *HTTPHandler) listClasses(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	classes, err := h.service.ListClasses(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": classes})
+}
+
+func (h *HTTPHandler) listCourses(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	courses, err := h.service.ListCourses(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": courses})
 }
 
 func (h *HTTPHandler) createUser(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +292,36 @@ func (h *HTTPHandler) createRubricTemplate(w http.ResponseWriter, r *http.Reques
 	httpx.WriteJSON(w, http.StatusCreated, template)
 }
 
+func (h *HTTPHandler) listTeacherCourses(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	courses, err := h.service.ListTeacherCourses(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": courses})
+}
+
+func (h *HTTPHandler) listRubricTemplates(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	templates, err := h.service.ListRubricTemplates(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": templates})
+}
+
 func (h *HTTPHandler) createRubricVersion(w http.ResponseWriter, r *http.Request) {
 	actor, err := h.currentActor(r)
 	if err != nil {
@@ -270,6 +338,21 @@ func (h *HTTPHandler) createRubricVersion(w http.ResponseWriter, r *http.Request
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, version)
+}
+
+func (h *HTTPHandler) listRubricVersions(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	versions, err := h.service.ListRubricVersions(r.Context(), actor, r.PathValue("templateID"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": versions})
 }
 
 func (h *HTTPHandler) publishRubricVersion(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +387,21 @@ func (h *HTTPHandler) createExperiment(w http.ResponseWriter, r *http.Request) {
 	httpx.WriteJSON(w, http.StatusCreated, experiment)
 }
 
+func (h *HTTPHandler) listCourseExperiments(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	experiments, err := h.service.ListExperimentsForCourse(r.Context(), actor, r.PathValue("courseID"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": experiments})
+}
+
 func (h *HTTPHandler) publishExperiment(w http.ResponseWriter, r *http.Request) {
 	actor, err := h.currentActor(r)
 	if err != nil {
@@ -336,6 +434,36 @@ func (h *HTTPHandler) createSubmission(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.WriteJSON(w, http.StatusCreated, submission)
+}
+
+func (h *HTTPHandler) listStudentExperiments(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	experiments, err := h.service.ListStudentExperiments(r.Context(), actor, limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": experiments})
+}
+
+func (h *HTTPHandler) listStudentSubmissions(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	submissions, err := h.service.ListStudentSubmissions(r.Context(), actor, r.URL.Query().Get("experiment_id"), limit)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": submissions})
 }
 
 func (h *HTTPHandler) uploadArtifact(w http.ResponseWriter, r *http.Request) {

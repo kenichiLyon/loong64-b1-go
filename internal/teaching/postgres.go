@@ -130,6 +130,92 @@ ORDER BY selected.created_at DESC, selected.id, user_roles.role`, limit)
 	return users, nil
 }
 
+func (r *PostgresRepository) ListClasses(ctx context.Context, limit int) ([]Class, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, code, name, COALESCE(grade_year, 0), COALESCE(major, ''), status, created_at, updated_at
+FROM classes
+ORDER BY created_at DESC, id
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	classes := make([]Class, 0)
+	for rows.Next() {
+		var class Class
+		if err := rows.Scan(&class.ID, &class.Code, &class.Name, &class.GradeYear, &class.Major, &class.Status, &class.CreatedAt, &class.UpdatedAt); err != nil {
+			return nil, mapDBError(err)
+		}
+		classes = append(classes, class)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return classes, nil
+}
+
+func (r *PostgresRepository) ListCourses(ctx context.Context, limit int) ([]Course, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, code, name, term, status, created_by, created_at, updated_at
+FROM courses
+ORDER BY created_at DESC, id
+LIMIT $1`, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	courses := make([]Course, 0)
+	for rows.Next() {
+		var course Course
+		if err := rows.Scan(&course.ID, &course.Code, &course.Name, &course.Term, &course.Status, &course.CreatedBy, &course.CreatedAt, &course.UpdatedAt); err != nil {
+			return nil, mapDBError(err)
+		}
+		courses = append(courses, course)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return courses, nil
+}
+
+func (r *PostgresRepository) ListCoursesForTeacher(ctx context.Context, teacherID string, limit int) ([]Course, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT courses.id, courses.code, courses.name, courses.term, courses.status, courses.created_by, courses.created_at, courses.updated_at
+FROM courses
+JOIN course_teachers ON course_teachers.course_id = courses.id
+WHERE course_teachers.teacher_id = $1
+ORDER BY courses.created_at DESC, courses.id
+LIMIT $2`, teacherID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	courses := make([]Course, 0)
+	for rows.Next() {
+		var course Course
+		if err := rows.Scan(&course.ID, &course.Code, &course.Name, &course.Term, &course.Status, &course.CreatedBy, &course.CreatedAt, &course.UpdatedAt); err != nil {
+			return nil, mapDBError(err)
+		}
+		courses = append(courses, course)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return courses, nil
+}
+
 func (r *PostgresRepository) SetUserRoles(ctx context.Context, userID string, roles []Role, audit AuditEntry) error {
 	pool, err := r.pool()
 	if err != nil {
@@ -361,6 +447,47 @@ RETURNING id, name, COALESCE(description, ''), owner_id, scope, status, created_
 	return template, nil
 }
 
+func (r *PostgresRepository) ListRubricTemplates(ctx context.Context, ownerID string, limit int) ([]RubricTemplate, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	query := `
+SELECT id, name, COALESCE(description, ''), owner_id, scope, status, created_at, updated_at
+FROM rubric_templates`
+	args := []any{}
+	if ownerID != "" {
+		query += ` WHERE owner_id = $1`
+		args = append(args, ownerID)
+	}
+	query += `
+ORDER BY created_at DESC, id`
+	if ownerID != "" {
+		query += ` LIMIT $2`
+		args = append(args, limit)
+	} else {
+		query += ` LIMIT $1`
+		args = append(args, limit)
+	}
+	rows, err := pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	templates := make([]RubricTemplate, 0)
+	for rows.Next() {
+		var template RubricTemplate
+		if err := rows.Scan(&template.ID, &template.Name, &template.Description, &template.OwnerID, &template.Scope, &template.Status, &template.CreatedAt, &template.UpdatedAt); err != nil {
+			return nil, mapDBError(err)
+		}
+		templates = append(templates, template)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return templates, nil
+}
+
 func (r *PostgresRepository) RubricTemplateOwner(ctx context.Context, templateID string) (string, error) {
 	pool, err := r.pool()
 	if err != nil {
@@ -417,6 +544,35 @@ RETURNING id, version_id, code, name, COALESCE(description, ''), weight_bps, max
 		return RubricTemplateVersion{}, nil, err
 	}
 	return version, createdMetrics, nil
+}
+
+func (r *PostgresRepository) ListRubricVersions(ctx context.Context, templateID string, limit int) ([]RubricTemplateVersion, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT id, template_id, version_no, status, weight_mode, total_weight_bps, published_at, created_by, created_at
+FROM rubric_template_versions
+WHERE template_id = $1
+ORDER BY version_no DESC, created_at DESC
+LIMIT $2`, templateID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	versions := make([]RubricTemplateVersion, 0)
+	for rows.Next() {
+		var version RubricTemplateVersion
+		if err := scanVersion(rows, &version); err != nil {
+			return nil, mapDBError(err)
+		}
+		versions = append(versions, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return versions, nil
 }
 
 func (r *PostgresRepository) RubricVersionOwner(ctx context.Context, versionID string) (string, error) {
@@ -539,6 +695,40 @@ FROM experiments
 WHERE course_id = $1
 ORDER BY created_at DESC, id
 LIMIT $2`, courseID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	experiments := make([]Experiment, 0)
+	for rows.Next() {
+		var experiment Experiment
+		if err := scanExperiment(rows, &experiment); err != nil {
+			return nil, mapDBError(err)
+		}
+		experiments = append(experiments, experiment)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return experiments, nil
+}
+
+func (r *PostgresRepository) ListStudentExperiments(ctx context.Context, studentID string, limit int) ([]Experiment, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := pool.Query(ctx, `
+SELECT experiments.id, experiments.course_id, experiments.title, COALESCE(experiments.description, ''), experiments.submission_spec,
+       experiments.rubric_version_id, experiments.status, experiments.start_at, experiments.due_at, experiments.published_at,
+       experiments.created_by, experiments.created_at, experiments.updated_at
+FROM experiments
+JOIN enrollments ON enrollments.course_id = experiments.course_id
+WHERE enrollments.student_id = $1
+  AND enrollments.status = 'active'
+  AND experiments.status = 'published'
+ORDER BY experiments.published_at DESC NULLS LAST, experiments.created_at DESC, experiments.id
+LIMIT $2`, studentID, limit)
 	if err != nil {
 		return nil, mapDBError(err)
 	}
@@ -734,6 +924,46 @@ FROM submissions
 WHERE experiment_id = $1
 ORDER BY created_at DESC, id
 LIMIT $2`, experimentID, limit)
+	if err != nil {
+		return nil, mapDBError(err)
+	}
+	defer rows.Close()
+	submissions := make([]Submission, 0)
+	for rows.Next() {
+		var submission Submission
+		if err := scanSubmission(rows, &submission); err != nil {
+			return nil, mapDBError(err)
+		}
+		submissions = append(submissions, submission)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDBError(err)
+	}
+	return submissions, nil
+}
+
+func (r *PostgresRepository) ListSubmissionsForStudent(ctx context.Context, studentID, experimentID string, limit int) ([]Submission, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return nil, err
+	}
+	query := `
+SELECT id, experiment_id, student_id, status, attempt_no, submitted_at, created_at, updated_at
+FROM submissions
+WHERE student_id = $1`
+	args := []any{studentID}
+	if experimentID != "" {
+		query += ` AND experiment_id = $2
+ORDER BY created_at DESC, id
+LIMIT $3`
+		args = append(args, experimentID, limit)
+	} else {
+		query += `
+ORDER BY created_at DESC, id
+LIMIT $2`
+		args = append(args, limit)
+	}
+	rows, err := pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, mapDBError(err)
 	}

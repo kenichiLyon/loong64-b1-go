@@ -306,6 +306,29 @@ paths:
         '403':
           $ref: '#/components/responses/Error'
   /api/v1/admin/classes:
+    get:
+      summary: 管理员查询班级
+      operationId: listAdminClasses
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 班级列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Class'
     post:
       summary: 管理员创建班级
       operationId: createAdminClass
@@ -323,6 +346,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/Class'
   /api/v1/admin/courses:
+    get:
+      summary: 管理员查询课程
+      operationId: listAdminCourses
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 课程列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
     post:
       summary: 管理员创建课程
       operationId: createAdminCourse
@@ -514,6 +560,29 @@ paths:
         '403':
           $ref: '#/components/responses/Error'
   /api/v1/teacher/rubric-templates:
+    get:
+      summary: 教师查询评价模板
+      operationId: listTeacherRubricTemplates
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RubricTemplate'
     post:
       summary: 教师创建评价模板
       operationId: createTeacherRubricTemplate
@@ -531,6 +600,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/RubricTemplate'
   /api/v1/teacher/rubric-templates/{templateId}/versions:
+    get:
+      summary: 教师查询模板版本
+      operationId: listTeacherRubricVersions
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 模板版本列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RubricTemplateVersion'
     post:
       summary: 教师创建评价模板版本
       operationId: createTeacherRubricVersion
@@ -562,7 +655,55 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RubricTemplateVersion'
+  /api/v1/teacher/courses:
+    get:
+      summary: 教师查询已授权课程
+      operationId: listTeacherCourses
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 课程列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Course'
   /api/v1/teacher/courses/{courseId}/experiments:
+    get:
+      summary: 教师查询课程下实验
+      operationId: listTeacherCourseExperiments
+      parameters:
+        - $ref: '#/components/parameters/CourseId'
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 实验列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Experiment'
     post:
       summary: 教师创建实训任务
       operationId: createTeacherExperiment
@@ -594,6 +735,30 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Experiment'
+  /api/v1/student/experiments:
+    get:
+      summary: 学生查询可提交实验
+      operationId: listStudentExperiments
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 已发布且当前学生可见的实验列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Experiment'
   /api/v1/student/experiments/{experimentId}/submissions:
     post:
       summary: 学生创建实训提交
@@ -617,6 +782,34 @@ paths:
           $ref: '#/components/responses/Error'
         '403':
           $ref: '#/components/responses/Error'
+  /api/v1/student/submissions:
+    get:
+      summary: 学生查询自己的提交
+      operationId: listStudentSubmissions
+      parameters:
+        - name: experiment_id
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+      responses:
+        '200':
+          description: 学生提交列表
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Submission'
   /api/v1/student/submissions/{submissionId}/artifacts:
     post:
       summary: 学生上传成果附件

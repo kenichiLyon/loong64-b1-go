@@ -273,6 +273,34 @@ func TestSetUserPasswordRequiresAdmin(t *testing.T) {
 	}
 }
 
+func TestListTeacherCoursesUsesTeacherScope(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := &fakeRepo{teacherCourses: []Course{{ID: "course-1", Name: "Course 1"}}}
+	service := NewService(repo)
+	courses, err := service.ListTeacherCourses(context.Background(), actor, 20)
+	if err != nil {
+		t.Fatalf("ListTeacherCourses failed: %v", err)
+	}
+	if len(courses) != 1 || courses[0].ID != "course-1" {
+		t.Fatalf("unexpected courses: %+v", courses)
+	}
+}
+
+func TestListStudentExperimentsRequiresStudentRole(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{})
+	_, err = service.ListStudentExperiments(context.Background(), actor, 20)
+	if ErrorKindOf(err) != KindForbidden {
+		t.Fatalf("expected forbidden, got %v", err)
+	}
+}
+
 func validRubricVersionInput() CreateRubricVersionInput {
 	return CreateRubricVersionInput{
 		WeightMode: string(WeightModeStrict100),
@@ -303,6 +331,13 @@ type fakeRepo struct {
 	reportExports                     map[string]ReportExport
 	experimentSummaries               map[string]experimentReportItem
 	courseExperiments                 []Experiment
+	classes                           []Class
+	courses                           []Course
+	teacherCourses                    []Course
+	rubricTemplates                   []RubricTemplate
+	rubricVersions                    []RubricTemplateVersion
+	studentExperiments                []Experiment
+	studentSubmissions                []Submission
 	userCount                         int
 	lastPasswordHash                  string
 }
@@ -321,6 +356,11 @@ func (f *fakeRepo) CountUsers(context.Context) (int, error) {
 }
 func (f *fakeRepo) ListUsers(context.Context, int) ([]User, error) {
 	return nil, errors.New("not implemented")
+}
+func (f *fakeRepo) ListClasses(context.Context, int) ([]Class, error)  { return f.classes, nil }
+func (f *fakeRepo) ListCourses(context.Context, int) ([]Course, error) { return f.courses, nil }
+func (f *fakeRepo) ListCoursesForTeacher(context.Context, string, int) ([]Course, error) {
+	return f.teacherCourses, nil
 }
 func (f *fakeRepo) SetUserRoles(context.Context, string, []Role, AuditEntry) error {
 	return errors.New("not implemented")
@@ -345,6 +385,9 @@ func (f *fakeRepo) EnrollStudent(context.Context, Enrollment, AuditEntry) error 
 func (f *fakeRepo) CreateRubricTemplate(context.Context, RubricTemplate, AuditEntry) (RubricTemplate, error) {
 	return RubricTemplate{}, errors.New("not implemented")
 }
+func (f *fakeRepo) ListRubricTemplates(context.Context, string, int) ([]RubricTemplate, error) {
+	return f.rubricTemplates, nil
+}
 func (f *fakeRepo) RubricTemplateOwner(context.Context, string) (string, error) {
 	return f.rubricTemplateOwner, nil
 }
@@ -361,6 +404,9 @@ func (f *fakeRepo) RubricVersionOwner(context.Context, string) (string, error) {
 		return f.rubricVersionOwner, nil
 	}
 	return f.rubricTemplateOwner, nil
+}
+func (f *fakeRepo) ListRubricVersions(context.Context, string, int) ([]RubricTemplateVersion, error) {
+	return f.rubricVersions, nil
 }
 func (f *fakeRepo) PublishRubricVersion(context.Context, string, AuditEntry) (RubricTemplateVersion, error) {
 	return RubricTemplateVersion{}, nil
@@ -382,6 +428,9 @@ func (f *fakeRepo) ExperimentSubmissionAccess(context.Context, string, string) (
 }
 func (f *fakeRepo) ListExperimentsForCourse(context.Context, string, int) ([]Experiment, error) {
 	return f.courseExperiments, nil
+}
+func (f *fakeRepo) ListStudentExperiments(context.Context, string, int) ([]Experiment, error) {
+	return f.studentExperiments, nil
 }
 func (f *fakeRepo) CreateSubmission(_ context.Context, submission Submission, _ AuditEntry) (Submission, error) {
 	return submission, nil
@@ -413,6 +462,9 @@ func (f *fakeRepo) ListSubmissionsForExperiment(_ context.Context, experimentID 
 		return submissions, nil
 	}
 	return nil, nil
+}
+func (f *fakeRepo) ListSubmissionsForStudent(context.Context, string, string, int) ([]Submission, error) {
+	return f.studentSubmissions, nil
 }
 func (f *fakeRepo) GetSubmissionDetail(_ context.Context, submissionID string) (SubmissionDetail, error) {
 	if item, ok := f.experimentSummaries[submissionID]; ok {
