@@ -110,6 +110,14 @@ export class APIClient {
     return this.request('/api/v1/admin/users', options);
   }
 
+  async listClasses(options: RequestOptions): Promise<{ items: ClassRecord[] }> {
+    return this.request('/api/v1/admin/classes', options);
+  }
+
+  async listCourses(options: RequestOptions): Promise<{ items: CourseRecord[] }> {
+    return this.request('/api/v1/admin/courses', options);
+  }
+
   async createUser(payload: { username: string; display_name: string; email?: string; student_no?: string; employee_no?: string; password?: string; roles: string[] }, options: RequestOptions): Promise<ActorProfile> {
     return this.request('/api/v1/admin/users', {
       ...options,
@@ -174,6 +182,18 @@ export class APIClient {
     });
   }
 
+  async listTeacherCourses(options: RequestOptions): Promise<{ items: CourseRecord[] }> {
+    return this.request('/api/v1/teacher/courses', options);
+  }
+
+  async listRubricTemplates(options: RequestOptions): Promise<{ items: RubricTemplateRecord[] }> {
+    return this.request('/api/v1/teacher/rubric-templates', options);
+  }
+
+  async listRubricVersions(templateID: string, options: RequestOptions): Promise<{ items: RubricVersionRecord[] }> {
+    return this.request(`/api/v1/teacher/rubric-templates/${encodeURIComponent(templateID)}/versions`, options);
+  }
+
   async createRubricVersion(templateID: string, payload: { weight_mode: string; metrics: Array<{ code: string; name: string; description?: string; weight_bps: number; max_score: number; sort_order: number }> }, options: RequestOptions): Promise<RubricVersionWithMetrics> {
     return this.request(`/api/v1/teacher/rubric-templates/${encodeURIComponent(templateID)}/versions`, {
       ...options,
@@ -208,6 +228,19 @@ export class APIClient {
 
   async getSubmission(submissionID: string, role: 'teacher' | 'student', options: RequestOptions): Promise<SubmissionDetail> {
     return this.request(`/api/v1/${role}/submissions/${encodeURIComponent(submissionID)}`, options);
+  }
+
+  async listTeacherExperiments(courseID: string, options: RequestOptions): Promise<{ items: ExperimentRecord[] }> {
+    return this.request(`/api/v1/teacher/courses/${encodeURIComponent(courseID)}/experiments`, options);
+  }
+
+  async listStudentExperiments(options: RequestOptions): Promise<{ items: ExperimentRecord[] }> {
+    return this.request('/api/v1/student/experiments', options);
+  }
+
+  async listStudentSubmissions(experimentID: string, options: RequestOptions): Promise<{ items: Submission[] }> {
+    const suffix = experimentID ? `?experiment_id=${encodeURIComponent(experimentID)}` : '';
+    return this.request(`/api/v1/student/submissions${suffix}`, options);
   }
 
   async uploadArtifact(submissionID: string, file: File, artifactKind: string, options: RequestOptions): Promise<unknown> {

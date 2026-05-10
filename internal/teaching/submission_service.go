@@ -164,6 +164,16 @@ func (s *Service) ListSubmissionsForExperiment(ctx context.Context, actor Actor,
 	return s.repo.ListSubmissionsForExperiment(ctx, strings.TrimSpace(experimentID), clampLimit(limit))
 }
 
+func (s *Service) ListStudentSubmissions(ctx context.Context, actor Actor, experimentID string, limit int) ([]Submission, error) {
+	if err := s.ready(); err != nil {
+		return nil, err
+	}
+	if err := actor.Require(RoleStudent); err != nil {
+		return nil, err
+	}
+	return s.repo.ListSubmissionsForStudent(ctx, actor.ID, strings.TrimSpace(experimentID), clampLimit(limit))
+}
+
 func (s *Service) GetSubmissionDetail(ctx context.Context, actor Actor, submissionID string) (SubmissionDetail, error) {
 	if err := s.ready(); err != nil {
 		return SubmissionDetail{}, err
