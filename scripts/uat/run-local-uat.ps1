@@ -290,8 +290,6 @@ try {
   $adminCsrf = Get-UatCookieValue -Session $adminSession -BaseUrl $baseUrl -Name 'loong64_b1_csrf'
   $adminMe = Invoke-UatJson -Session $adminSession -BaseUrl $baseUrl -Path '/api/v1/me'
 
-  $headers = @{ }
-  if ($adminCsrf) { $headers['X-CSRF-Token'] = $adminCsrf }
   $teacher = Invoke-UatJson -Session $adminSession -BaseUrl $baseUrl -Path '/api/v1/admin/users' -Method POST -CsrfToken $adminCsrf -Body @{
     username = 'teacher1'
     display_name = 'Teacher One'
@@ -322,37 +320,16 @@ try {
   Invoke-UatJson -Session $adminSession -BaseUrl $baseUrl -Path "/api/v1/admin/courses/$($course.id)/enrollments" -Method PUT -CsrfToken $adminCsrf -Body @{ student_id = $student.id; class_id = $class.id } | Out-Null
 
   $teacherSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-  $teacherLogin = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path '/api/v1/auth/login' -Method POST -Body @{
-    username = 'teacher1'
-    password = 'teacher-pass'
-  }
+  Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path '/api/v1/auth/login' -Method POST -Body @{ username = 'teacher1'; password = 'teacher-pass' } | Out-Null
   $teacherCsrf = Get-UatCookieValue -Session $teacherSession -BaseUrl $baseUrl -Name 'loong64_b1_csrf'
-  $template = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path '/api/v1/teacher/rubric-templates' -Method POST -CsrfToken $teacherCsrf -Body @{
-    name = 'MVP Template'
-    description = 'Base scoring template'
-  }
-  $version = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/rubric-templates/$($template.id)/versions" -Method POST -CsrfToken $teacherCsrf -Body @{
-    weight_mode = 'strict_100'
-    metrics = @(
-      @{ code = 'quality'; name = 'Code Quality'; weight_bps = 4000; max_score = 40; sort_order = 1 },
-      @{ code = 'docs'; name = 'Docs'; weight_bps = 3000; max_score = 30; sort_order = 2 },
-      @{ code = 'feature'; name = 'Feature'; weight_bps = 3000; max_score = 30; sort_order = 3 }
-    )
-  }
+  $template = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path '/api/v1/teacher/rubric-templates' -Method POST -CsrfToken $teacherCsrf -Body @{ name = 'MVP Template'; description = 'Base scoring template' }
+  $version = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/rubric-templates/$($template.id)/versions" -Method POST -CsrfToken $teacherCsrf -Body @{ weight_mode = 'strict_100'; metrics = @( @{ code = 'quality'; name = 'Code Quality'; weight_bps = 4000; max_score = 40; sort_order = 1 }, @{ code = 'docs'; name = 'Docs'; weight_bps = 3000; max_score = 30; sort_order = 2 }, @{ code = 'feature'; name = 'Feature'; weight_bps = 3000; max_score = 30; sort_order = 3 } ) }
   Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/rubric-template-versions/$($version.version.id)/publish" -Method POST -CsrfToken $teacherCsrf -Body @{} | Out-Null
-  $experiment = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/courses/$($course.id)/experiments" -Method POST -CsrfToken $teacherCsrf -Body @{
-    title = 'LoongArch deployment lab'
-    description = 'Submit report, screenshot and code archive.'
-    rubric_version_id = $version.version.id
-    submission_spec = @{ required_artifacts = @('report', 'screenshot', 'code_archive') }
-  }
+  $experiment = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/courses/$($course.id)/experiments" -Method POST -CsrfToken $teacherCsrf -Body @{ title = 'LoongArch deployment lab'; description = 'Submit report, screenshot and code archive.'; rubric_version_id = $version.version.id; submission_spec = @{ required_artifacts = @('report', 'screenshot', 'code_archive') } }
   Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/experiments/$($experiment.id)/publish" -Method POST -CsrfToken $teacherCsrf -Body @{} | Out-Null
 
   $studentSession = New-Object Microsoft.PowerShell.Commands.WebRequestSession
-  Invoke-UatJson -Session $studentSession -BaseUrl $baseUrl -Path '/api/v1/auth/login' -Method POST -Body @{
-    username = 'student1'
-    password = 'student-pass'
-  } | Out-Null
+  Invoke-UatJson -Session $studentSession -BaseUrl $baseUrl -Path '/api/v1/auth/login' -Method POST -Body @{ username = 'student1'; password = 'student-pass' } | Out-Null
   $studentCsrf = Get-UatCookieValue -Session $studentSession -BaseUrl $baseUrl -Name 'loong64_b1_csrf'
   $studentExperiments = Invoke-UatJson -Session $studentSession -BaseUrl $baseUrl -Path '/api/v1/student/experiments'
   $submission = Invoke-UatJson -Session $studentSession -BaseUrl $baseUrl -Path "/api/v1/student/experiments/$($experiment.id)/submissions" -Method POST -CsrfToken $studentCsrf -Body @{}
@@ -364,17 +341,8 @@ try {
   Invoke-UatMultipartUpload -BaseUrl $baseUrl -Session $studentSession -CsrfToken $studentCsrf -SubmissionId $submission.id -FilePath $samples.png -ArtifactKind 'screenshot' -ContentType 'image/png' | Out-Null
   Invoke-UatMultipartUpload -BaseUrl $baseUrl -Session $studentSession -CsrfToken $studentCsrf -SubmissionId $submission.id -FilePath $samples.zip -ArtifactKind 'code_archive' -ContentType 'application/zip' | Out-Null
 
-  $submissionDetail = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/submissions/$($submission.id)"
   $evaluation = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/submissions/$($submission.id)/evaluations/initial" -Method POST -CsrfToken $teacherCsrf -Body @{ mode = 'rule_and_llm' }
-  $reviewPayload = @{
-    evaluation_result_id = $evaluation.result.id
-    teacher_comment = 'UAT review'
-    scores = @(
-      @{ metric_code = 'quality'; final_score = 36; source = 'rule'; source_metric_score_id = $evaluation.scores[0].id; adjustment_reason = 'UAT smoke'; comment = 'OK' },
-      @{ metric_code = 'docs'; final_score = 28; source = 'rule'; source_metric_score_id = $evaluation.scores[1].id; adjustment_reason = 'UAT smoke'; comment = 'OK' },
-      @{ metric_code = 'feature'; final_score = 29; source = 'rule'; source_metric_score_id = $evaluation.scores[2].id; adjustment_reason = 'UAT smoke'; comment = 'OK' }
-    )
-  }
+  $reviewPayload = @{ evaluation_result_id = $evaluation.result.id; teacher_comment = 'UAT review'; scores = @( @{ metric_code = 'quality'; final_score = 36; source = 'rule'; source_metric_score_id = $evaluation.scores[0].id; adjustment_reason = 'UAT smoke'; comment = 'OK' }, @{ metric_code = 'docs'; final_score = 28; source = 'rule'; source_metric_score_id = $evaluation.scores[1].id; adjustment_reason = 'UAT smoke'; comment = 'OK' }, @{ metric_code = 'feature'; final_score = 29; source = 'rule'; source_metric_score_id = $evaluation.scores[2].id; adjustment_reason = 'UAT smoke'; comment = 'OK' } ) }
   $review = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/submissions/$($submission.id)/review" -Method PUT -CsrfToken $teacherCsrf -Body $reviewPayload
   $published = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/submissions/$($submission.id)/review/publish" -Method POST -CsrfToken $teacherCsrf -Body @{ confirm = $true }
   $studentReview = Invoke-UatJson -Session $studentSession -BaseUrl $baseUrl -Path "/api/v1/student/submissions/$($submission.id)/review"
@@ -383,25 +351,12 @@ try {
   $experimentExport = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/experiments/$($experiment.id)/report-exports" -Method POST -CsrfToken $teacherCsrf -Body @{ format = 'csv' }
   $courseExport = Invoke-UatJson -Session $teacherSession -BaseUrl $baseUrl -Path "/api/v1/teacher/courses/$($course.id)/report-exports" -Method POST -CsrfToken $teacherCsrf -Body @{ format = 'pdf' }
 
-  $summary = [pscustomobject]@{
-    bootstrap = $bootstrap
-    admin_me = $adminMe
-    teacher_id = $teacher.id
-    student_id = $student.id
-    class_id = $class.id
-    course_id = $course.id
-    template_id = $template.id
-    version_id = $version.version.id
-    experiment_id = $experiment.id
-    submission_id = $submission.id
-    evaluation_id = $evaluation.result.id
-    review_status = $review.review.status
-    published_status = $published.review.status
-    student_review_status = $studentReview.review.status
-    report_export_id = $reportExport.id
-    experiment_export_id = $experimentExport.id
-    course_export_id = $courseExport.id
-    student_experiments = $studentExperiments.items.Count
+  [pscustomobject]@{ bootstrap = $bootstrap; admin_me = $adminMe; teacher_id = $teacher.id; student_id = $student.id; class_id = $class.id; course_id = $course.id; template_id = $template.id; version_id = $version.version.id; experiment_id = $experiment.id; submission_id = $submission.id; evaluation_id = $evaluation.result.id; review_status = $review.review.status; published_status = $published.review.status; student_review_status = $studentReview.review.status; report_export_id = $reportExport.id; experiment_export_id = $experimentExport.id; course_export_id = $courseExport.id; student_experiments = $studentExperiments.items.Count } | ConvertTo-Json -Depth 10
+}
+finally {
+  if ($job) {
+    Stop-Job $job -ErrorAction SilentlyContinue | Out-Null
+    Receive-Job $job -Keep -ErrorAction SilentlyContinue | Out-Null
+    Remove-Job $job -ErrorAction SilentlyContinue | Out-Null
   }
-  $summary | ConvertTo-Json -Depth 10
 }
