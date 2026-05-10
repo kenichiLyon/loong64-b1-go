@@ -2,6 +2,14 @@
 
 这份文档用于试点 MVP 的人工验收。目标不是“打勾”，而是保证每一步都能留下可复现记录。
 
+可选自动化 smoke：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/uat/run-local-uat.ps1
+```
+
+这条脚本优先覆盖本地 SQLite + 单服务二进制场景，用于先验证核心 API 闭环；目标机实测和视觉验收仍按下文逐项执行。
+
 ## 0. 前置条件
 
 - 已完成 `go test ./...`
