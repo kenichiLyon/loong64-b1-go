@@ -221,7 +221,7 @@ npm run build
 - Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
 - MVP 交付清单：`docs/MVP_DELIVERY.md`
-- UAT 检查单：`docs/UAT_CHECKLIST.md`
+- UAT 执行手册与记录模板：`docs/UAT_CHECKLIST.md`
 - 部署助手与上下文工程：`docs/DEPLOYMENT_ASSISTANT.md`
 - 容器次级交付：`docs/CONTAINER_RUNTIME.md`
 - 本地 PostgreSQL 调试：`docs/LOCAL_POSTGRES.md`
