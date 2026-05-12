@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appembed "github.com/kenichiLyon/loong64-b1-go"
+	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/assistant"
 	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
@@ -38,10 +39,20 @@ func NewHandler(deps Dependencies) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	checks := health.New(
+	checkers := []health.Checker{
 		database.Checker{Pool: deps.DB},
 		storage.Checker{Store: deps.Store},
-	)
+	}
+	if deps.Config.AIGatewayBaseURL != "" {
+		client, err := aigateway.New(deps.Config.AIGatewayBaseURL, deps.Config.AIGatewayAPIKey, deps.Config.AIGatewayTimeout)
+		if err != nil {
+			logger.Warn("ai gateway configuration is invalid; readiness check will report ai gateway as failed", "error", err)
+			checkers = append(checkers, aigateway.Checker{})
+		} else {
+			checkers = append(checkers, aigateway.Checker{Client: client})
+		}
+	}
+	checks := health.New(checkers...)
 	webDist, webEnabled := appembed.Dist()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", rootHandler(webDist, webEnabled))
