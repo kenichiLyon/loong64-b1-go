@@ -6,23 +6,46 @@
 
 - release 二进制与 Web 静态产物完整性
 - systemd 单元安装与服务拉起
-- PostgreSQL 迁移、备份与恢复命令
+- 数据库迁移与服务启动
 - `/health/live`、`/health/ready` 健康检查
 - 目标机架构、字体、systemd、数据库与服务状态采样
 
 ## 2. 推荐执行顺序
 
+按下面顺序执行，并把输出保存在验收记录中：
+
 ```bash
 sha256sum -c SHA256SUMS
 sudo sh deploy/kylin/scripts/install-systemd.sh
+sudo install -o loong64b1 -g loong64b1 -m 0755 /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64-full /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64
+sh deploy/kylin/scripts/preflight-check.sh
 sudo systemctl start loong64-b1-migrate.service
 sudo systemctl enable --now loong64-b1-go.service
-sh deploy/kylin/scripts/preflight-check.sh
+BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/smoke-test.sh
 BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/verify-deployment.sh
-sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
+BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
 ```
 
-## 3. 备份与恢复
+## 3. 每步期望结果
+
+1. `sha256sum -c SHA256SUMS`
+   - 所有发布物返回 `OK`
+2. `install-systemd.sh`
+   - 创建用户、组、目录、unit 文件和 env 模板
+3. `preflight-check.sh`
+   - 返回 `Preflight check passed.`
+4. `loong64-b1-migrate.service`
+   - 启动成功，无迁移报错
+5. `loong64-b1-go.service`
+   - `active (running)`
+6. `smoke-test.sh`
+   - `/health/live` 和 `/health/ready` 都返回成功
+7. `verify-deployment.sh`
+   - 根路径和健康检查都返回正确 JSON
+8. `collect-env.sh`
+   - 生成包含系统、版本、systemd、health 输出的记录文件
+
+## 4. 备份与恢复
 
 数据库备份：
 
@@ -39,7 +62,7 @@ pg_restore --clean --if-exists --no-owner --dbname loong64_b1_restore /var/backu
 tar -xzf /var/backups/loong64-b1-go/storage.tar.gz -C /
 ```
 
-## 4. LLM 配置示例
+## 5. LLM 配置示例
 
 本地模型服务：
 
@@ -57,7 +80,7 @@ LLM_MODEL=gpt-compatible-model
 LLM_API_KEY=REDACTED
 ```
 
-## 5. 验收记录模板
+## 6. 验收记录模板
 
 ```text
 日期：
@@ -69,7 +92,8 @@ Go：
 PostgreSQL：
 字体检测：
 服务状态：
-验证命令：
+执行步骤：
+关键命令输出：
 结果：
 问题与处理：
 ```

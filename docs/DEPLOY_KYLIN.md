@@ -162,24 +162,24 @@ sudo systemctl start loong64-b1-migrate.service
 sudo systemctl enable --now loong64-b1-go.service
 sudo systemctl status loong64-b1-go.service
 sh deploy/kylin/scripts/preflight-check.sh
-BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/verify-deployment.sh
-```
-
-## 9. 冒烟测试
-
-```bash
 BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/smoke-test.sh
 BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/verify-deployment.sh
 ```
 
-或手动执行：
+## 9. 环境采样与留档
 
 ```bash
-curl -fsS http://127.0.0.1:8080/health/live
-curl -fsS http://127.0.0.1:8080/health/ready
+BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
 ```
 
-`ready` 必须覆盖当前数据库驱动和本地对象存储。
+`collect-env.sh` 会记录：
+
+- `uname -m` / `uname -a`
+- `/etc/os-release`
+- `go version`
+- `psql --version`
+- `systemctl status loong64-b1-go.service`
+- `/health/live` 与 `/health/ready` 输出
 
 ## 10. 备份与恢复
 
@@ -199,11 +199,5 @@ tar -xzf /var/backups/loong64-b1-go/storage.tar.gz -C /
 ```
 
 ## 11. LoongArch 记录
-
-首次部署必须把以下信息追加到 `docs/LOONGARCH_COMPATIBILITY.md`：
-
-```bash
-sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
-```
 
 完整验收清单见 `docs/STAGE7_DEPLOYMENT_VERIFICATION.md`。
