@@ -2,29 +2,25 @@
 set -eu
 
 BASE_URL="${BASE_URL:-http://127.0.0.1:8080}"
-WEB_ROOT="${WEB_ROOT:-/opt/loong64-b1-go/web}"
-EXPECTED_ARCH="${EXPECTED_ARCH:-loongarch64}"
 
-echo "Running preflight checks"
-sh "$(dirname "$0")/preflight-check.sh"
-
-ACTUAL_ARCH="$(uname -m)"
-if [ "$ACTUAL_ARCH" != "$EXPECTED_ARCH" ]; then
-  echo "warning: expected arch $EXPECTED_ARCH but got $ACTUAL_ARCH" >&2
-fi
-
-[ -f "$WEB_ROOT/index.html" ] || {
-  echo "verification failed: missing $WEB_ROOT/index.html" >&2
-  exit 1
+check_json() {
+  endpoint="$1"
+  expected_fragment="$2"
+  body="$(curl -fsS "$BASE_URL$endpoint")"
+  echo "$body" | grep '"status":"ok"' >/dev/null
+  echo "$body" | grep "$expected_fragment" >/dev/null
 }
 
-echo "Checking service active state"
-systemctl is-active --quiet loong64-b1-go.service
+echo "Checking live health"
+check_json "/health/live" '"service":"loong64-b1-go"'
 
-echo "Checking $BASE_URL/health/live"
-curl -fsS "$BASE_URL/health/live" >/dev/null
+echo "Checking ready health"
+check_json "/health/ready" '"service":"loong64-b1-go"'
 
-echo "Checking $BASE_URL/health/ready"
-curl -fsS "$BASE_URL/health/ready" >/dev/null
+echo "Checking root metadata"
+root_body="$(curl -fsS "$BASE_URL/")"
+echo "$root_body" | grep '"service":"loong64-b1-go"' >/dev/null
+echo "$root_body" | grep '"live":"/health/live"' >/dev/null
+echo "$root_body" | grep '"ready":"/health/ready"' >/dev/null
 
 echo "Deployment verification passed."
