@@ -2,6 +2,7 @@ package teaching
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -95,6 +96,50 @@ func TestCreateInitialEvaluationUsesAIGatewayEvaluatorWhenConfigured(t *testing.
 	}
 	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
 		t.Fatalf("expected ai gateway score: %+v", detail.Scores)
+	}
+}
+
+func TestCreateInitialEvaluationAcceptsGranularEvidenceRefs(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := validEvaluationContext()
+	ctx.Artifacts[0].Artifact.Metadata = mustJSON(map[string]any{
+		"sections": []map[string]any{{
+			"title":   "Overview",
+			"content": "implemented api and tests",
+		}},
+	})
+	service := NewService(
+		&fakeRepo{teacherAllowed: true, evaluationContext: ctx},
+		WithSubmissionEvaluator(fakeSubmissionEvaluator{
+			response: aigateway.EvaluateSubmissionResponse{
+				Summary: "section-backed summary",
+				MetricScores: []map[string]any{{
+					"metric_code":     "quality",
+					"suggested_score": 19,
+					"confidence_bps":  8100,
+					"rationale":       "section evidence",
+					"evidence_refs":   []string{"artifact:artifact-1#section:1"},
+				}},
+				RawModelMeta: map[string]any{"engine": "gateway-stub"},
+			},
+		}),
+	)
+	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("CreateInitialEvaluation should accept granular evidence refs: %v", err)
+	}
+	if detail.Result.LLMSummary != "section-backed summary" {
+		t.Fatalf("unexpected detail: %+v", detail.Result)
+	}
+	var refs []string
+	if err := json.Unmarshal(detail.Scores[len(detail.Scores)-1].EvidenceRefs, &refs); err != nil {
+		t.Fatalf("evidence refs should be json array: %v", err)
+	}
+	if len(refs) != 1 || refs[0] != "artifact:artifact-1#section:1" {
+		t.Fatalf("unexpected granular refs: %+v", refs)
 	}
 }
 

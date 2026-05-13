@@ -349,6 +349,9 @@ func allowedEvidenceRefs(evalCtx EvaluationContext) map[string]string {
 			ref = fmt.Sprintf("artifact:%d", i+1)
 		}
 		refs[ref] = sanitizeEvidenceText(item.Extraction.TextExcerpt, maxEvidenceExcerpt)
+		for key, value := range artifactMetadataEvidenceRefs(ref, item.Artifact.Metadata) {
+			refs[key] = value
+		}
 	}
 	return refs
 }
@@ -400,6 +403,48 @@ func firstStringMapValue(values map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+func artifactMetadataEvidenceRefs(baseRef string, payload json.RawMessage) map[string]string {
+	decoded := decodeRawJSONObject(payload)
+	if len(decoded) == 0 {
+		return map[string]string{}
+	}
+	refs := make(map[string]string)
+	appendArtifactMetadataRefs(refs, baseRef, "section", decoded["sections"])
+	appendArtifactMetadataRefs(refs, baseRef, "evidence", decoded["evidence"])
+	return refs
+}
+
+func appendArtifactMetadataRefs(dst map[string]string, baseRef, kind string, raw any) {
+	items, ok := raw.([]any)
+	if !ok {
+		return
+	}
+	for index, item := range items {
+		entry, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		text := metadataEvidenceText(entry)
+		if text == "" {
+			continue
+		}
+		dst[fmt.Sprintf("%s#%s:%d", baseRef, kind, index+1)] = sanitizeEvidenceText(text, maxEvidenceExcerpt)
+	}
+}
+
+func metadataEvidenceText(entry map[string]any) string {
+	parts := make([]string, 0, 4)
+	for _, key := range []string{"title", "heading", "name", "label", "content", "text", "excerpt", "body", "summary"} {
+		if value, ok := entry[key]; ok {
+			text := strings.TrimSpace(fmt.Sprint(value))
+			if text != "" && text != "<nil>" {
+				parts = append(parts, text)
+			}
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 func (s *Service) requireTeacherSubmissionAccess(ctx context.Context, actor Actor, submissionID string) error {
