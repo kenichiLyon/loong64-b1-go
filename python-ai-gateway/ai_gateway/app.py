@@ -15,6 +15,7 @@ from .models import (
     QueryRetrievalRequest,
     QueryRetrievalResponse,
 )
+from .evaluator import EvaluationError, evaluate_submission_request
 from .parser import ParseError, parse_artifact_file
 
 
@@ -73,13 +74,10 @@ def evaluate_submission(
     authorization: str | None = Header(default=None),
 ) -> EvaluateSubmissionResponse:
     maybe_require_auth(authorization)
-    return EvaluateSubmissionResponse(
-        summary="stub evaluation result",
-        findings=[],
-        metric_scores=[],
-        confidence=0.0,
-        raw_model_meta={"mode": request.mode, "engine": "stub"},
-    )
+    try:
+        return evaluate_submission_request(request)
+    except EvaluationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @app.post("/internal/build-retrieval-index", response_model=BuildRetrievalIndexResponse)

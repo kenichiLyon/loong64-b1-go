@@ -63,3 +63,45 @@ func TestParseArtifact(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", response)
 	}
 }
+
+func TestEvaluateSubmission(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/evaluate-submission" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var request EvaluateSubmissionRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if request.SubmissionID != "submission-1" {
+			t.Fatalf("unexpected submission id: %s", request.SubmissionID)
+		}
+		_ = json.NewEncoder(w).Encode(EvaluateSubmissionResponse{
+			Summary: "gateway",
+			MetricScores: []map[string]any{{
+				"metric_code":     "quality",
+				"suggested_score": 18,
+				"confidence_bps":  7600,
+				"rationale":       "looks good",
+				"evidence_refs":   []string{"artifact:artifact-1"},
+			}},
+			RawModelMeta: map[string]any{"engine": "stub"},
+		})
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, "", time.Second)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	response, err := client.EvaluateSubmission(context.Background(), EvaluateSubmissionRequest{
+		SubmissionID: "submission-1",
+		Mode:         "rule_and_llm",
+	})
+	if err != nil {
+		t.Fatalf("EvaluateSubmission failed: %v", err)
+	}
+	if response.Summary != "gateway" || len(response.MetricScores) != 1 {
+		t.Fatalf("unexpected response: %+v", response)
+	}
+}

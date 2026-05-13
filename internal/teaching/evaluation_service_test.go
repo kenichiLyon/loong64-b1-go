@@ -2,9 +2,11 @@ package teaching
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
 
@@ -63,6 +65,63 @@ func TestCreateInitialEvaluationWithLLMValidatesOutput(t *testing.T) {
 	}
 }
 
+func TestCreateInitialEvaluationUsesAIGatewayEvaluatorWhenConfigured(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(
+		&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()},
+		WithSubmissionEvaluator(fakeSubmissionEvaluator{
+			response: aigateway.EvaluateSubmissionResponse{
+				Summary: "gateway summary",
+				MetricScores: []map[string]any{{
+					"metric_code":     "quality",
+					"suggested_score": 17,
+					"confidence_bps":  7200,
+					"rationale":       "gateway evidence",
+					"evidence_refs":   []string{"artifact:artifact-1"},
+				}},
+				RawModelMeta: map[string]any{"engine": "gateway-stub"},
+			},
+		}),
+	)
+	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("CreateInitialEvaluation with ai gateway should succeed: %v", err)
+	}
+	if detail.Result.LLMStatus != EvaluationStepSucceeded || detail.Result.LLMSummary != "gateway summary" {
+		t.Fatalf("unexpected gateway result: %+v", detail.Result)
+	}
+	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
+		t.Fatalf("expected ai gateway score: %+v", detail.Scores)
+	}
+}
+
+func TestCreateInitialEvaluationFallsBackToGoLLMWhenAIGatewayFails(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(
+		&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()},
+		WithSubmissionEvaluator(fakeSubmissionEvaluator{err: errors.New("gateway unavailable")}),
+		WithLLMClient(fakeLLMCompleter{
+			content: `{"summary":"fallback llm","metrics":[{"metric_code":"quality","suggested_score":18,"confidence_bps":8000,"rationale":"fallback used","evidence_refs":["artifact:artifact-1"]}],"risks":[]}`,
+		}),
+	)
+	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("CreateInitialEvaluation should fall back to Go llm: %v", err)
+	}
+	if detail.Result.LLMStatus != EvaluationStepSucceeded || detail.Result.LLMSummary != "fallback llm" {
+		t.Fatalf("unexpected fallback result: %+v", detail.Result)
+	}
+	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
+		t.Fatalf("expected fallback llm score: %+v", detail.Scores)
+	}
+}
+
 func TestCreateInitialEvaluationMarksMalformedLLMForReview(t *testing.T) {
 	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
 	if err != nil {
@@ -102,6 +161,15 @@ type fakeLLMCompleter struct {
 
 func (f fakeLLMCompleter) CompleteJSON(context.Context, llm.CompletionRequest) (llm.CompletionResponse, error) {
 	return llm.CompletionResponse{Model: "mock-model", Content: f.content, PromptTokens: 10, CompletionTokens: 20, Latency: time.Millisecond}, f.err
+}
+
+type fakeSubmissionEvaluator struct {
+	response aigateway.EvaluateSubmissionResponse
+	err      error
+}
+
+func (f fakeSubmissionEvaluator) EvaluateSubmission(context.Context, aigateway.EvaluateSubmissionRequest) (aigateway.EvaluateSubmissionResponse, error) {
+	return f.response, f.err
 }
 
 func hasScoreSource(scores []MetricScore, source MetricScoreSource) bool {
