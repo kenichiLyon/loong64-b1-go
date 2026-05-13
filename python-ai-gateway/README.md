@@ -10,11 +10,11 @@ This service is intentionally narrow:
 
 It only serves internal AI-heavy capabilities for the Go application.
 
-Current real capability:
+Current real capabilities:
 
 - artifact parsing for text, docx, pdf, images, and zip archives
 
-Current stub capability:
+Current stub capabilities:
 
 - evaluation
 - retrieval index building

@@ -28,6 +28,7 @@ The current phase delivers:
   - `jpg` / `jpeg`
   - `zip`
 - Go-side readiness integration and internal HTTP client
+- optional bearer auth when `AI_GATEWAY_API_KEY` is configured on the Python side
 
 The current phase does not yet deliver:
 
@@ -73,7 +74,7 @@ uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 
 ## Go Integration
 
-Set:
+Set on the Go side:
 
 ```env
 AI_GATEWAY_BASE_URL=http://127.0.0.1:8081
@@ -82,6 +83,22 @@ AI_GATEWAY_API_KEY=
 ```
 
 When `AI_GATEWAY_BASE_URL` is set, the Go service includes the middleware in readiness checks.
+
+## Python-side Auth
+
+If you also set this on the Python service process:
+
+```env
+AI_GATEWAY_API_KEY=shared-secret
+```
+
+the middleware requires:
+
+```http
+Authorization: Bearer shared-secret
+```
+
+If it is unset, auth is disabled for local development.
 
 ## Design Notes
 
