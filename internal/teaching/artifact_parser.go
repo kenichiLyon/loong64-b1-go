@@ -26,7 +26,7 @@ func (s *Service) maybeParseWithArtifactParser(ctx context.Context, artifactID s
 		return storedArtifact{}, unavailableError("parse artifact through ai gateway", err)
 	}
 	if strings.ToLower(strings.TrimSpace(response.Status)) != "succeeded" {
-		return storedArtifact{}, validationError(firstNonEmpty(response.Error, "ai gateway parse failed"))
+		return storedArtifact{}, validationError(firstNonEmptyArtifactValue(response.Error, "ai gateway parse failed"))
 	}
 	metadata := response.Metadata
 	if metadata == nil {
@@ -44,7 +44,7 @@ func (s *Service) maybeParseWithArtifactParser(ctx context.Context, artifactID s
 	return stored, nil
 }
 
-func firstNonEmpty(values ...string) string {
+func firstNonEmptyArtifactValue(values ...string) string {
 	for _, value := range values {
 		trimmed := strings.TrimSpace(value)
 		if trimmed != "" {
