@@ -10,7 +10,7 @@ from .models import (
     EvaluateSubmissionResponse,
     QueryRetrievalRequest,
 )
-from .retrieval import STORE, chunk_artifact_text
+from .retrieval import STORE, chunk_artifact_text, normalize_text
 
 
 class EvaluationError(RuntimeError):
@@ -226,12 +226,12 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
             )
         )
         metadata = artifact.get("metadata", {})
-        for text in iter_metadata_texts(metadata):
+        for entry in iter_metadata_texts(metadata, evidence_ref):
             raw_chunks.extend(
                 chunk_artifact_text(
                     artifact_id=artifact_id,
-                    evidence_ref=evidence_ref,
-                    text=text,
+                    evidence_ref=entry["evidence_ref"],
+                    text=entry["text"],
                 )
             )
     if len(raw_chunks) == 0:
@@ -285,15 +285,15 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
     }
 
 
-def iter_metadata_texts(metadata: Any) -> list[str]:
+def iter_metadata_texts(metadata: Any, base_ref: str) -> list[dict[str, str]]:
     if not isinstance(metadata, dict):
         return []
-    texts: list[str] = []
+    texts: list[dict[str, str]] = []
     for key in ("sections", "evidence"):
         items = metadata.get(key, [])
         if not isinstance(items, list):
             continue
-        for item in items:
+        for index, item in enumerate(items, start=1):
             if not isinstance(item, dict):
                 continue
             parts: list[str] = []
@@ -303,5 +303,5 @@ def iter_metadata_texts(metadata: Any) -> list[str]:
                     parts.append(normalized)
             text = " ".join(parts).strip()
             if text != "":
-                texts.append(text)
+                texts.append({"evidence_ref": f"{base_ref}#{key[:-1]}:{index}", "text": text})
     return texts
