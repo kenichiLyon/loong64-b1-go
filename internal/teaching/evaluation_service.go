@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
 
@@ -48,11 +49,11 @@ func (s *Service) CreateInitialEvaluation(ctx context.Context, actor Actor, subm
 	}
 	var llmLog *LLMCallLog
 	if mode == RuleAndLLMMode {
-		llmScores, summary, log, llmErr := s.evaluateWithLLM(ctx, evalCtx, evaluationID, evidenceSnapshot)
+		llmScores, summary, log, llmErr := s.evaluateWithConfiguredAI(ctx, evalCtx, evaluationID, evidenceSnapshot, mode)
 		llmLog = log
 		if llmErr != nil {
 			result.LLMStatus = EvaluationStepFailed
-			if s.llmClient == nil {
+			if s.submissionEvaluator == nil && s.llmClient == nil {
 				result.LLMStatus = EvaluationStepNotConfigured
 			}
 			result.Status = EvaluationStatusNeedsReview
@@ -83,6 +84,19 @@ func (s *Service) GetLatestEvaluation(ctx context.Context, actor Actor, submissi
 		return EvaluationResultDetail{}, err
 	}
 	return s.repo.GetLatestEvaluation(ctx, submissionID)
+}
+
+func (s *Service) evaluateWithConfiguredAI(ctx context.Context, evalCtx EvaluationContext, evaluationID string, evidenceSnapshot json.RawMessage, mode string) ([]MetricScore, string, *LLMCallLog, error) {
+	if s.submissionEvaluator != nil {
+		scores, summary, log, err := s.evaluateWithAIGateway(ctx, evalCtx, evaluationID, evidenceSnapshot, mode)
+		if err == nil {
+			return scores, summary, log, nil
+		}
+		if s.llmClient == nil {
+			return nil, "", log, err
+		}
+	}
+	return s.evaluateWithLLM(ctx, evalCtx, evaluationID, evidenceSnapshot)
 }
 
 func (s *Service) evaluateWithLLM(ctx context.Context, evalCtx EvaluationContext, evaluationID string, evidenceSnapshot json.RawMessage) ([]MetricScore, string, *LLMCallLog, error) {
@@ -136,6 +150,47 @@ func (s *Service) evaluateWithLLM(ctx context.Context, evalCtx EvaluationContext
 	return scores, summary, log, nil
 }
 
+func (s *Service) evaluateWithAIGateway(ctx context.Context, evalCtx EvaluationContext, evaluationID string, evidenceSnapshot json.RawMessage, mode string) ([]MetricScore, string, *LLMCallLog, error) {
+	request := buildAIGatewayEvaluationRequest(evalCtx, evidenceSnapshot, mode)
+	inputHash := sha256Hex(mustJSON(request))
+	log := &LLMCallLog{
+		ID:                 NewID("llg"),
+		EvaluationResultID: evaluationID,
+		Provider:           "python-ai-gateway",
+		PromptVersion:      InitialEvaluationPromptVersion,
+		InputHash:          inputHash,
+		Output:             json.RawMessage(`{}`),
+		Status:             "skipped",
+	}
+	if s.submissionEvaluator == nil {
+		log.Error = "submission evaluator is not configured"
+		return nil, "", log, unavailableError("submission evaluator is not configured", nil)
+	}
+	response, err := s.submissionEvaluator.EvaluateSubmission(ctx, request)
+	if len(response.RawModelMeta) > 0 {
+		log.Output = mustJSON(response.RawModelMeta)
+		log.Model = firstStringMapValue(response.RawModelMeta, "model", "engine")
+	}
+	if err != nil {
+		log.Status = "failed"
+		log.Error = sanitizeEvidenceText(err.Error(), 300)
+		return nil, "", log, err
+	}
+	if strings.TrimSpace(response.Error) != "" {
+		log.Status = "failed"
+		log.Error = sanitizeEvidenceText(response.Error, 300)
+		return nil, "", log, validationError(response.Error)
+	}
+	log.Status = "succeeded"
+	scores, summary, err := validateAIGatewayOutput(response, evaluationID, evalCtx.Metrics, allowedEvidenceRefs(evalCtx))
+	if err != nil {
+		log.Status = "failed"
+		log.Error = sanitizeEvidenceText(err.Error(), 300)
+		return nil, "", log, err
+	}
+	return scores, summary, log, nil
+}
+
 func buildLLMPromptPayload(evalCtx EvaluationContext, evidenceSnapshot json.RawMessage) json.RawMessage {
 	type promptMetric struct {
 		ID          string          `json:"id"`
@@ -165,6 +220,48 @@ func buildLLMPromptPayload(evalCtx EvaluationContext, evidenceSnapshot json.RawM
 			"risks":   "array of strings",
 		},
 	})
+}
+
+func buildAIGatewayEvaluationRequest(evalCtx EvaluationContext, evidenceSnapshot json.RawMessage, mode string) aigateway.EvaluateSubmissionRequest {
+	metrics := make([]map[string]any, 0, len(evalCtx.Metrics))
+	for _, metric := range evalCtx.Metrics {
+		metrics = append(metrics, map[string]any{
+			"id":                metric.ID,
+			"code":              metric.Code,
+			"name":              metric.Name,
+			"description":       metric.Description,
+			"max_score":         metric.MaxScore,
+			"weight_bps":        metric.WeightBPS,
+			"required_evidence": decodeRawJSONObject(metric.RequiredEvidence),
+		})
+	}
+	artifacts := make([]map[string]any, 0, len(evalCtx.Artifacts))
+	for _, item := range evalCtx.Artifacts {
+		artifacts = append(artifacts, map[string]any{
+			"artifact_id":   item.Artifact.ID,
+			"kind":          item.Artifact.Kind,
+			"original_name": item.Artifact.OriginalName,
+			"content_type":  item.Artifact.ContentType,
+			"text_excerpt":  item.Extraction.TextExcerpt,
+			"metadata":      decodeRawJSONObject(item.Artifact.Metadata),
+		})
+	}
+	return aigateway.EvaluateSubmissionRequest{
+		SubmissionID: evalCtx.Submission.ID,
+		Rubric: map[string]any{
+			"prompt_version": InitialEvaluationPromptVersion,
+			"metrics":        metrics,
+		},
+		SubmissionSpec: decodeRawJSONObject(evalCtx.Experiment.SubmissionSpec),
+		EvidenceBundle: map[string]any{
+			"submission_id":         evalCtx.Submission.ID,
+			"experiment_title":      evalCtx.Experiment.Title,
+			"evidence_snapshot":     decodeRawJSONObject(evidenceSnapshot),
+			"allowed_evidence_refs": sortedRefs(allowedEvidenceRefs(evalCtx)),
+			"artifacts":             artifacts,
+		},
+		Mode: mode,
+	}
 }
 
 func initialEvaluationSystemPrompt() string {
@@ -232,6 +329,18 @@ func validateLLMOutput(content, evaluationID string, metrics []Metric, refs map[
 	return scores, sanitizeEvidenceText(decoded.Summary, 1000), nil
 }
 
+func validateAIGatewayOutput(response aigateway.EvaluateSubmissionResponse, evaluationID string, metrics []Metric, refs map[string]string) ([]MetricScore, string, error) {
+	encoded, err := json.Marshal(map[string]any{
+		"summary": response.Summary,
+		"metrics": response.MetricScores,
+		"risks":   []string{},
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("encode ai gateway output: %w", err)
+	}
+	return validateLLMOutput(string(encoded), evaluationID, metrics, refs)
+}
+
 func allowedEvidenceRefs(evalCtx EvaluationContext) map[string]string {
 	refs := make(map[string]string, len(evalCtx.Artifacts))
 	for i, item := range evalCtx.Artifacts {
@@ -264,6 +373,33 @@ func hasSevereFindings(findings []RuleCheckFinding) bool {
 func sha256Hex(payload []byte) string {
 	sum := sha256.Sum256(payload)
 	return hex.EncodeToString(sum[:])
+}
+
+func decodeRawJSONObject(payload json.RawMessage) map[string]any {
+	if len(payload) == 0 || !json.Valid(payload) {
+		return map[string]any{}
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		return map[string]any{}
+	}
+	return decoded
+}
+
+func firstStringMapValue(values map[string]any, keys ...string) string {
+	for _, key := range keys {
+		value, ok := values[key]
+		if !ok {
+			continue
+		}
+		if text, ok := value.(string); ok {
+			trimmed := strings.TrimSpace(text)
+			if trimmed != "" {
+				return trimmed
+			}
+		}
+	}
+	return ""
 }
 
 func (s *Service) requireTeacherSubmissionAccess(ctx context.Context, actor Actor, submissionID string) error {
