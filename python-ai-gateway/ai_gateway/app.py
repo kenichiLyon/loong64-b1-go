@@ -17,6 +17,7 @@ from .models import (
 )
 from .evaluator import EvaluationError, evaluate_submission_request
 from .parser import ParseError, parse_artifact_file
+from .retrieval import RetrievalError, STORE
 
 
 app = FastAPI(title="python-ai-gateway", version="0.1.0")
@@ -86,10 +87,11 @@ def build_retrieval_index(
     authorization: str | None = Header(default=None),
 ) -> BuildRetrievalIndexResponse:
     maybe_require_auth(authorization)
-    return BuildRetrievalIndexResponse(
-        index_ref=f"stub-index:{request.submission_id}",
-        chunk_count=len(request.chunks),
-    )
+    try:
+        index_ref, chunk_count = STORE.build_index(request)
+    except RetrievalError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return BuildRetrievalIndexResponse(index_ref=index_ref, chunk_count=chunk_count)
 
 
 @app.post("/internal/query-retrieval", response_model=QueryRetrievalResponse)
@@ -98,7 +100,8 @@ def query_retrieval(
     authorization: str | None = Header(default=None),
 ) -> QueryRetrievalResponse:
     maybe_require_auth(authorization)
-    return QueryRetrievalResponse(
-        matches=[],
-        citations=[],
-    )
+    try:
+        matches, citations = STORE.query_index(request)
+    except RetrievalError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return QueryRetrievalResponse(matches=matches, citations=citations)

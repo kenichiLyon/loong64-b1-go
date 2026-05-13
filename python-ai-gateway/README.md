@@ -14,11 +14,12 @@ Current real capabilities:
 
 - artifact parsing for text, docx, pdf, images, and zip archives
 - evaluation through an OpenAI-compatible model endpoint when `AI_GATEWAY_LLM_*` is configured
+- in-memory retrieval index building and query endpoints for artifact evidence
+- retrieval-augmented evaluation prompts built from artifact excerpts
 
 Current stub capabilities:
 
-- retrieval index building
-- retrieval querying
+- none for the current middleware endpoints
 
 Evaluation environment variables:
 
