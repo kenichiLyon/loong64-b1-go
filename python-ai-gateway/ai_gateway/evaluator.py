@@ -289,7 +289,7 @@ def iter_metadata_texts(metadata: Any, base_ref: str) -> list[dict[str, str]]:
     if not isinstance(metadata, dict):
         return []
     texts: list[dict[str, str]] = []
-    for key in ("sections", "evidence"):
+    for key, ref_kind in (("sections", "section"), ("evidence", "evidence")):
         items = metadata.get(key, [])
         if not isinstance(items, list):
             continue
@@ -303,5 +303,5 @@ def iter_metadata_texts(metadata: Any, base_ref: str) -> list[dict[str, str]]:
                     parts.append(normalized)
             text = " ".join(parts).strip()
             if text != "":
-                texts.append({"evidence_ref": f"{base_ref}#{key[:-1]}:{index}", "text": text})
+                texts.append({"evidence_ref": f"{base_ref}#{ref_kind}:{index}", "text": text})
     return texts
