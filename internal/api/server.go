@@ -13,6 +13,7 @@ import (
 	"time"
 
 	appembed "github.com/kenichiLyon/loong64-b1-go"
+	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/assistant"
 	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
@@ -38,20 +39,35 @@ func NewHandler(deps Dependencies) http.Handler {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	checks := health.New(
+	checkers := []health.Checker{
 		database.Checker{Pool: deps.DB},
 		storage.Checker{Store: deps.Store},
-	)
+	}
 	webDist, webEnabled := appembed.Dist()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", rootHandler(webDist, webEnabled))
-	mux.HandleFunc("/health", liveHandler(checks))
-	mux.HandleFunc("/health/live", liveHandler(checks))
-	mux.HandleFunc("/health/ready", readyHandler(checks, deps.Config.ReadyTimeout))
+
 	options := []teaching.ServiceOption{
 		teaching.WithArtifactStore(deps.Store),
 		teaching.WithUploadLimits(deps.Config.MaxUploadBytes, deps.Config.MaxArtifactsPerSubmission),
 	}
+	var aiGatewayClient *aigateway.Client
+	if deps.Config.AIGatewayBaseURL != "" {
+		client, err := aigateway.New(deps.Config.AIGatewayBaseURL, deps.Config.AIGatewayAPIKey, deps.Config.AIGatewayTimeout)
+		if err != nil {
+			logger.Warn("ai gateway configuration is invalid; readiness check will report ai gateway as failed", "error", err)
+			checkers = append(checkers, aigateway.Checker{})
+		} else {
+			aiGatewayClient = client
+			checkers = append(checkers, aigateway.Checker{Client: client})
+			options = append(options, teaching.WithArtifactParser(client))
+		}
+	}
+	checks := health.New(checkers...)
+	mux.HandleFunc("/health", liveHandler(checks))
+	mux.HandleFunc("/health/live", liveHandler(checks))
+	mux.HandleFunc("/health/ready", readyHandler(checks, deps.Config.ReadyTimeout))
+	_ = aiGatewayClient
 	var llmGateway *llm.Gateway
 	if deps.Config.LLMBaseURL != "" {
 		createdGateway, err := llm.NewOpenAICompatible(llm.Config{BaseURL: deps.Config.LLMBaseURL, Model: deps.Config.LLMModel, APIKey: deps.Config.LLMAPIKey, Timeout: deps.Config.LLMTimeout})
