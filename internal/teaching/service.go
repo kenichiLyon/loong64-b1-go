@@ -8,6 +8,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
 
@@ -181,9 +182,14 @@ type Repository interface {
 	GetReportExport(context.Context, string) (ReportExport, error)
 }
 
+type ArtifactParser interface {
+	ParseArtifact(context.Context, aigateway.ParseArtifactRequest) (aigateway.ParseArtifactResponse, error)
+}
+
 type Service struct {
 	repo                      Repository
 	store                     ArtifactStore
+	artifactParser            ArtifactParser
 	maxUploadBytes            int64
 	maxArtifactsPerSubmission int
 	llmClient                 LLMCompleter
@@ -202,6 +208,12 @@ type ServiceOption func(*Service)
 func WithArtifactStore(store ArtifactStore) ServiceOption {
 	return func(s *Service) {
 		s.store = store
+	}
+}
+
+func WithArtifactParser(parser ArtifactParser) ServiceOption {
+	return func(s *Service) {
+		s.artifactParser = parser
 	}
 }
 
