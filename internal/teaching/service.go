@@ -186,10 +186,15 @@ type ArtifactParser interface {
 	ParseArtifact(context.Context, aigateway.ParseArtifactRequest) (aigateway.ParseArtifactResponse, error)
 }
 
+type SubmissionEvaluator interface {
+	EvaluateSubmission(context.Context, aigateway.EvaluateSubmissionRequest) (aigateway.EvaluateSubmissionResponse, error)
+}
+
 type Service struct {
 	repo                      Repository
 	store                     ArtifactStore
 	artifactParser            ArtifactParser
+	submissionEvaluator       SubmissionEvaluator
 	maxUploadBytes            int64
 	maxArtifactsPerSubmission int
 	llmClient                 LLMCompleter
@@ -214,6 +219,12 @@ func WithArtifactStore(store ArtifactStore) ServiceOption {
 func WithArtifactParser(parser ArtifactParser) ServiceOption {
 	return func(s *Service) {
 		s.artifactParser = parser
+	}
+}
+
+func WithSubmissionEvaluator(evaluator SubmissionEvaluator) ServiceOption {
+	return func(s *Service) {
+		s.submissionEvaluator = evaluator
 	}
 }
 
