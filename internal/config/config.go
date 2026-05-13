@@ -20,6 +20,9 @@ type Config struct {
 	DBDriver                  string
 	DatabaseURL               string
 	SQLitePath                string
+	AIGatewayBaseURL          string
+	AIGatewayAPIKey           string
+	AIGatewayTimeout          time.Duration
 	LLMBaseURL                string
 	LLMModel                  string
 	LLMAPIKey                 string
@@ -86,6 +89,9 @@ func Load() Config {
 		DBDriver:                  dbDriver,
 		DatabaseURL:               databaseURL,
 		SQLitePath:                sqlitePath,
+		AIGatewayBaseURL:          getenv("AI_GATEWAY_BASE_URL", ""),
+		AIGatewayAPIKey:           getenv("AI_GATEWAY_API_KEY", ""),
+		AIGatewayTimeout:          durationFromEnv("AI_GATEWAY_TIMEOUT", 10*time.Second),
 		LLMBaseURL:                getenv("LLM_BASE_URL", ""),
 		LLMModel:                  getenv("LLM_MODEL", ""),
 		LLMAPIKey:                 getenv("LLM_API_KEY", ""),
