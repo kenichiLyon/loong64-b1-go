@@ -62,6 +62,11 @@ func (s *Service) UploadArtifact(ctx context.Context, actor Actor, submissionID 
 	if err != nil {
 		return ArtifactWithExtraction{}, err
 	}
+	stored, err = s.maybeParseWithArtifactParser(ctx, artifactID, stored)
+	if err != nil {
+		cleanupStoredArtifact(s.store, stored.StorageKey)
+		return ArtifactWithExtraction{}, err
+	}
 	artifact := Artifact{
 		ID:           artifactID,
 		SubmissionID: submissionID,
