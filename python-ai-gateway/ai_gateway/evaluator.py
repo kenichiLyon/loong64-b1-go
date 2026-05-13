@@ -240,6 +240,7 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
     matches: list[dict[str, Any]] = []
     citations: list[dict[str, Any]] = []
     seen_chunk_ids: set[str] = set()
+    seen_citation_ids: set[str] = set()
     for metric in request.rubric.get("metrics", []):
         if not isinstance(metric, dict):
             continue
@@ -260,6 +261,10 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
             seen_chunk_ids.add(item["chunk_id"])
             matches.append(item)
         for citation in query_citations:
+            chunk_id = str(citation.get("chunk_id", "")).strip()
+            if chunk_id == "" or chunk_id in seen_citation_ids:
+                continue
+            seen_citation_ids.add(chunk_id)
             citations.append(citation)
 
     return {

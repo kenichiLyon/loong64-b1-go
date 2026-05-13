@@ -154,6 +154,14 @@ def tokenize(text: str) -> list[str]:
 
 
 def normalize_text(value: Any) -> str:
-    text = str(value).replace("\r", " ").replace("\n", " ")
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        text = value.decode("utf-8", errors="ignore")
+    elif isinstance(value, str):
+        text = value
+    else:
+        return ""
+    text = text.replace("\r", " ").replace("\n", " ")
     text = re.sub(r"\s+", " ", text)
     return text.strip()
