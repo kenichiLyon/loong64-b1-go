@@ -141,7 +141,7 @@ func (c *Client) get(ctx context.Context, path string, dst any) error {
 	if err != nil {
 		return fmt.Errorf("call ai gateway %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("ai gateway %s returned status %d", path, resp.StatusCode)
 	}
@@ -166,7 +166,7 @@ func (c *Client) post(ctx context.Context, path string, payload any, dst any) er
 	if err != nil {
 		return fmt.Errorf("call ai gateway %s: %w", path, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 300 {
 		return fmt.Errorf("ai gateway %s returned status %d", path, resp.StatusCode)
 	}
