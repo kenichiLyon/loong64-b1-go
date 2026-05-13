@@ -35,6 +35,12 @@ func (s *Service) maybeParseWithArtifactParser(ctx context.Context, artifactID s
 	metadata["artifact_id"] = artifactID
 	metadata["artifact_kind"] = string(stored.Kind)
 	metadata["parser_source"] = "python_ai_gateway"
+	if len(response.Sections) > 0 {
+		metadata["sections"] = response.Sections
+	}
+	if len(response.Evidence) > 0 {
+		metadata["evidence"] = response.Evidence
+	}
 	encoded, err := json.Marshal(metadata)
 	if err != nil {
 		return storedArtifact{}, unavailableError("encode ai gateway parse metadata", err)

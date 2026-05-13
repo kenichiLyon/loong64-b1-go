@@ -31,6 +31,14 @@ func TestStoreUploadedArtifactCanBeEnrichedByArtifactParser(t *testing.T) {
 			Metadata: map[string]any{
 				"parser": "python",
 			},
+			Sections: []map[string]any{{
+				"title":   "Overview",
+				"content": "section body",
+			}},
+			Evidence: []map[string]any{{
+				"kind": "keyword",
+				"text": "api test",
+			}},
 		},
 	}))
 	stored, err := service.storeUploadedArtifact(ArtifactUploadInput{
@@ -53,5 +61,8 @@ func TestStoreUploadedArtifactCanBeEnrichedByArtifactParser(t *testing.T) {
 	}
 	if metadata["parser_source"] != "python_ai_gateway" {
 		t.Fatalf("unexpected metadata: %+v", metadata)
+	}
+	if len(metadata["sections"].([]any)) != 1 || len(metadata["evidence"].([]any)) != 1 {
+		t.Fatalf("expected sections and evidence to be preserved: %+v", metadata)
 	}
 }

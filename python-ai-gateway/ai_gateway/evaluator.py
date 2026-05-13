@@ -225,6 +225,15 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
                 text=artifact.get("text_excerpt", ""),
             )
         )
+        metadata = artifact.get("metadata", {})
+        for text in iter_metadata_texts(metadata):
+            raw_chunks.extend(
+                chunk_artifact_text(
+                    artifact_id=artifact_id,
+                    evidence_ref=evidence_ref,
+                    text=text,
+                )
+            )
     if len(raw_chunks) == 0:
         return {"index_ref": "", "queries": [], "matches": [], "citations": [], "hit_count": 0}
 
@@ -274,3 +283,25 @@ def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any
         "citations": citations[:6],
         "hit_count": len(matches),
     }
+
+
+def iter_metadata_texts(metadata: Any) -> list[str]:
+    if not isinstance(metadata, dict):
+        return []
+    texts: list[str] = []
+    for key in ("sections", "evidence"):
+        items = metadata.get(key, [])
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            parts: list[str] = []
+            for field in ("title", "heading", "name", "label", "content", "text", "excerpt", "body", "summary"):
+                normalized = normalize_text(item.get(field))
+                if normalized != "":
+                    parts.append(normalized)
+            text = " ".join(parts).strip()
+            if text != "":
+                texts.append(text)
+    return texts
