@@ -4,7 +4,13 @@ import json
 import os
 from typing import Any
 
-from .models import EvaluateSubmissionRequest, EvaluateSubmissionResponse
+from .models import (
+    BuildRetrievalIndexRequest,
+    EvaluateSubmissionRequest,
+    EvaluateSubmissionResponse,
+    QueryRetrievalRequest,
+)
+from .retrieval import STORE, chunk_artifact_text
 
 
 class EvaluationError(RuntimeError):
@@ -18,9 +24,11 @@ def evaluate_submission_request(request: EvaluateSubmissionRequest) -> EvaluateS
             error="AI gateway LLM is not configured",
             raw_model_meta={"engine": "unconfigured"},
         )
-    prompt = build_evaluation_prompt(request)
+    retrieval_context = build_retrieval_context(request)
+    prompt = build_evaluation_prompt(request, retrieval_context)
     raw_output, model_meta = call_openai_compatible_model(config, prompt)
     summary, metric_scores = normalize_model_output(raw_output, request)
+    model_meta["retrieval_hits"] = retrieval_context["hit_count"]
     return EvaluateSubmissionResponse(
         summary=summary,
         metric_scores=metric_scores,
@@ -38,7 +46,7 @@ def load_evaluator_config() -> dict[str, Any]:
     }
 
 
-def build_evaluation_prompt(request: EvaluateSubmissionRequest) -> dict[str, Any]:
+def build_evaluation_prompt(request: EvaluateSubmissionRequest, retrieval_context: dict[str, Any]) -> dict[str, Any]:
     return {
         "task": "Return JSON only. Produce advisory metric scores for teacher review.",
         "prompt_version": request.rubric.get("prompt_version", "initial-evaluation-v1"),
@@ -47,6 +55,7 @@ def build_evaluation_prompt(request: EvaluateSubmissionRequest) -> dict[str, Any
         "rubric": request.rubric,
         "submission_spec": request.submission_spec,
         "evidence_bundle": request.evidence_bundle,
+        "retrieval_context": retrieval_context,
         "output_schema": {
             "summary": "string",
             "metrics": [
@@ -195,3 +204,68 @@ def as_int(value: Any, field_name: str) -> int:
         return int(value)
     except (TypeError, ValueError) as exc:
         raise EvaluationError(f"{field_name} must be an integer") from exc
+
+
+def build_retrieval_context(request: EvaluateSubmissionRequest) -> dict[str, Any]:
+    artifacts = request.evidence_bundle.get("artifacts", [])
+    raw_chunks: list[dict[str, Any]] = []
+    artifact_ids: list[str] = []
+    for artifact in artifacts:
+        if not isinstance(artifact, dict):
+            continue
+        artifact_id = str(artifact.get("artifact_id", "")).strip()
+        if artifact_id == "":
+            continue
+        artifact_ids.append(artifact_id)
+        evidence_ref = f"artifact:{artifact_id}"
+        raw_chunks.extend(
+            chunk_artifact_text(
+                artifact_id=artifact_id,
+                evidence_ref=evidence_ref,
+                text=artifact.get("text_excerpt", ""),
+            )
+        )
+    if len(raw_chunks) == 0:
+        return {"index_ref": "", "queries": [], "matches": [], "citations": [], "hit_count": 0}
+
+    index_ref, _chunk_count = STORE.build_index(
+        BuildRetrievalIndexRequest(
+            submission_id=request.submission_id,
+            artifact_ids=artifact_ids,
+            chunks=raw_chunks,
+        )
+    )
+
+    query_texts = []
+    matches: list[dict[str, Any]] = []
+    citations: list[dict[str, Any]] = []
+    seen_chunk_ids: set[str] = set()
+    for metric in request.rubric.get("metrics", []):
+        if not isinstance(metric, dict):
+            continue
+        query_text = " ".join(
+            str(metric.get(field, "")).strip()
+            for field in ("name", "description")
+            if str(metric.get(field, "")).strip() != ""
+        ).strip()
+        if query_text == "":
+            continue
+        query_texts.append(query_text)
+        query_matches, query_citations = STORE.query_index(
+            QueryRetrievalRequest(index_ref=index_ref, query=query_text, top_k=2)
+        )
+        for item in query_matches:
+            if item["chunk_id"] in seen_chunk_ids:
+                continue
+            seen_chunk_ids.add(item["chunk_id"])
+            matches.append(item)
+        for citation in query_citations:
+            citations.append(citation)
+
+    return {
+        "index_ref": index_ref,
+        "queries": query_texts,
+        "matches": matches[:6],
+        "citations": citations[:6],
+        "hit_count": len(matches),
+    }

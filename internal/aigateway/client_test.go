@@ -105,3 +105,73 @@ func TestEvaluateSubmission(t *testing.T) {
 		t.Fatalf("unexpected response: %+v", response)
 	}
 }
+
+func TestBuildRetrievalIndexAndQuery(t *testing.T) {
+	var createdIndexRef string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/internal/build-retrieval-index":
+			var request BuildRetrievalIndexRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode build request: %v", err)
+			}
+			if len(request.Chunks) != 1 {
+				t.Fatalf("expected one chunk, got %+v", request.Chunks)
+			}
+			createdIndexRef = "idx:submission-1:test"
+			_ = json.NewEncoder(w).Encode(BuildRetrievalIndexResponse{
+				IndexRef:   createdIndexRef,
+				ChunkCount: 1,
+			})
+		case "/internal/query-retrieval":
+			var request QueryRetrievalRequest
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode query request: %v", err)
+			}
+			if request.IndexRef != createdIndexRef {
+				t.Fatalf("unexpected index_ref: %s", request.IndexRef)
+			}
+			_ = json.NewEncoder(w).Encode(QueryRetrievalResponse{
+				Matches: []map[string]any{{
+					"chunk_id": "artifact-1:1",
+					"score":    3,
+				}},
+				Citations: []map[string]any{{
+					"evidence_ref": "artifact:artifact-1",
+				}},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer server.Close()
+
+	client, err := New(server.URL, "", time.Second)
+	if err != nil {
+		t.Fatalf("New failed: %v", err)
+	}
+	buildResponse, err := client.BuildRetrievalIndex(context.Background(), BuildRetrievalIndexRequest{
+		SubmissionID: "submission-1",
+		ArtifactIDs:  []string{"artifact-1"},
+		Chunks: []map[string]any{{
+			"chunk_id":     "artifact-1:1",
+			"artifact_id":  "artifact-1",
+			"evidence_ref": "artifact:artifact-1",
+			"text":         "implemented api tests",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BuildRetrievalIndex failed: %v", err)
+	}
+	queryResponse, err := client.QueryRetrieval(context.Background(), QueryRetrievalRequest{
+		IndexRef: buildResponse.IndexRef,
+		Query:    "api tests",
+		TopK:     3,
+	})
+	if err != nil {
+		t.Fatalf("QueryRetrieval failed: %v", err)
+	}
+	if len(queryResponse.Matches) != 1 || len(queryResponse.Citations) != 1 {
+		t.Fatalf("unexpected retrieval response: %+v", queryResponse)
+	}
+}
