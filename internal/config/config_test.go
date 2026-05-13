@@ -14,6 +14,8 @@ func TestLoadUsesDefaults(t *testing.T) {
 	t.Setenv("MAX_ARTIFACTS_PER_SUBMISSION", "")
 	t.Setenv("READY_TIMEOUT", "")
 	t.Setenv("LLM_TIMEOUT", "")
+	t.Setenv("AI_GATEWAY_BASE_URL", "")
+	t.Setenv("AI_GATEWAY_TIMEOUT", "")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "127.0.0.1:8080" {
@@ -40,6 +42,12 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.LLMTimeout != 30*time.Second {
 		t.Fatalf("unexpected LLMTimeout: %s", cfg.LLMTimeout)
 	}
+	if cfg.AIGatewayBaseURL != "" {
+		t.Fatalf("unexpected AIGatewayBaseURL: %s", cfg.AIGatewayBaseURL)
+	}
+	if cfg.AIGatewayTimeout != 10*time.Second {
+		t.Fatalf("unexpected AIGatewayTimeout: %s", cfg.AIGatewayTimeout)
+	}
 }
 
 func TestLoadParsesOverrides(t *testing.T) {
@@ -53,6 +61,8 @@ func TestLoadParsesOverrides(t *testing.T) {
 	t.Setenv("LLM_MODEL", "qwen")
 	t.Setenv("LLM_API_KEY", "test-key")
 	t.Setenv("LLM_TIMEOUT", "45s")
+	t.Setenv("AI_GATEWAY_BASE_URL", "http://127.0.0.1:8081")
+	t.Setenv("AI_GATEWAY_TIMEOUT", "2500ms")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "0.0.0.0:9000" {
@@ -78,6 +88,12 @@ func TestLoadParsesOverrides(t *testing.T) {
 	}
 	if cfg.LLMTimeout != 45*time.Second {
 		t.Fatalf("unexpected LLMTimeout: %s", cfg.LLMTimeout)
+	}
+	if cfg.AIGatewayBaseURL != "http://127.0.0.1:8081" {
+		t.Fatalf("unexpected AIGatewayBaseURL: %s", cfg.AIGatewayBaseURL)
+	}
+	if cfg.AIGatewayTimeout != 2500*time.Millisecond {
+		t.Fatalf("unexpected AIGatewayTimeout: %s", cfg.AIGatewayTimeout)
 	}
 }
 
