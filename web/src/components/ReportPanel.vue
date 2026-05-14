@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { resolveEvidenceSnippets } from '../lib/evidence';
 import type { CourseReportSummary, ExperimentReportSummary, ReportExport, SubmissionReport } from '../lib/types';
 
 const props = defineProps<{
@@ -42,6 +44,17 @@ function uniqueEvidenceRefs(report: SubmissionReport | null) {
   }
   return Array.from(refs);
 }
+
+const reportEvidenceRefs = computed(() => uniqueEvidenceRefs(props.report));
+const reportEvidenceSnippets = computed(() => {
+  if (!props.report) {
+    return [];
+  }
+  return resolveEvidenceSnippets({
+    submission: props.report.submission,
+    artifacts: props.report.artifacts,
+  }, reportEvidenceRefs.value);
+});
 </script>
 
 <template>
@@ -89,10 +102,17 @@ function uniqueEvidenceRefs(report: SubmissionReport | null) {
       </div>
     </div>
 
-    <div v-if="report && uniqueEvidenceRefs(report).length" class="summary-block">
+    <div v-if="reportEvidenceSnippets.length" class="summary-block">
       <h3>AI 引用证据</h3>
       <div class="chip-list">
-        <span v-for="ref in uniqueEvidenceRefs(report)" :key="ref" class="chip">{{ ref }}</span>
+        <span v-for="snippet in reportEvidenceSnippets" :key="snippet.ref" class="chip">{{ snippet.ref }}</span>
+      </div>
+      <div class="snippet-list">
+        <article v-for="snippet in reportEvidenceSnippets" :key="snippet.ref" class="snippet-card">
+          <strong>{{ snippet.title }}</strong>
+          <small>{{ snippet.ref }}</small>
+          <p>{{ snippet.text }}</p>
+        </article>
       </div>
     </div>
 
