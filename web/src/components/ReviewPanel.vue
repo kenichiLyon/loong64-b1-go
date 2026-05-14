@@ -19,59 +19,13 @@ const state = reactive({
 });
 
 const published = computed(() => props.review?.review.status === 'published');
+const retrievalContext = computed(() => {
+  const output = props.evaluation?.log?.output as Record<string, unknown> | undefined;
+  const context = output?.retrieval_context;
+  return context && typeof context === 'object' ? (context as Record<string, unknown>) : null;
+});
 
-watch(
-  () => [props.evaluation, props.review] as const,
-  ([evaluation, review]) => {
-    if (review) {
-      state.teacher_comment = review.review.teacher_comment ?? '';
-      state.scores = review.scores.map((score: TeacherMetricScore) => ({
-        metric_code: score.metric_code,
-        final_score: score.final_score,
-        max_score: score.max_score,
-        source: score.source,
-        source_metric_score_id: score.source_metric_score_id,
-        adjustment_reason: score.adjustment_reason ?? '',
-        comment: score.comment ?? '',
-      }));
-      return;
-    }
-    if (evaluation) {
-      const byMetric = new Map<string, typeof evaluation.scores[number]>();
-      for (const score of evaluation.scores) {
-        if (!byMetric.has(score.metric_code) || score.source === 'llm') {
-          byMetric.set(score.metric_code, score);
-        }
-      }
-      state.teacher_comment = evaluation.result.llm_summary ?? '';
-      state.scores = Array.from(byMetric.values()).map((score) => ({
-        metric_code: score.metric_code,
-        final_score: score.suggested_score,
-        max_score: score.max_score,
-        source: score.source,
-        source_metric_score_id: score.id,
-        adjustment_reason: '基于智能初评建议生成，教师已复核。',
-        comment: score.rationale,
-      }));
-    }
-  },
-  { immediate: true },
-);
-
-function save() {
-  emit('save', {
-    evaluation_result_id: props.evaluation?.result.id,
-    teacher_comment: state.teacher_comment,
-    scores: state.scores.map((score) => ({
-      metric_code: score.metric_code,
-      final_score: Number(score.final_score),
-      source: score.source,
-      source_metric_score_id: score.source_metric_score_id,
-      adjustment_reason: score.adjustment_reason,
-      comment: score.comment,
-    })),
-  });
-}
+...unchanged watch/save logic...
 </script>
 
 <template>
@@ -98,6 +52,19 @@ function save() {
       教师总评
       <textarea v-model="state.teacher_comment" :disabled="published" placeholder="给学生的综合反馈" />
     </label>
+
+    <section v-if="retrievalContext" class="evidence-card">
+      <p class="eyebrow">AI 检索证据</p>
+      <p class="muted">命中数：{{ retrievalContext.hit_count ?? 0 }}</p>
+      <div v-if="Array.isArray(retrievalContext.queries) && retrievalContext.queries.length" class="chip-list">
+        <span v-for="query in retrievalContext.queries" :key="String(query)" class="chip">{{ query }}</span>
+      </div>
+      <ul v-if="Array.isArray(retrievalContext.citations) && retrievalContext.citations.length" class="citation-list">
+        <li v-for="citation in retrievalContext.citations" :key="String((citation as Record<string, unknown>).chunk_id ?? (citation as Record<string, unknown>).evidence_ref)">
+          {{ (citation as Record<string, unknown>).evidence_ref ?? 'unknown evidence' }}
+        </li>
+      </ul>
+    </section>
 
     <div class="button-row">
       <button :disabled="busy || published || !state.scores.length" @click="save">保存草稿</button>

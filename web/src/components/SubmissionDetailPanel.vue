@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import type { SubmissionDetail, TeacherReviewDetail } from '../lib/types';
+import type { EvaluationResultDetail, SubmissionDetail, TeacherReviewDetail } from '../lib/types';
 
 defineProps<{
   detail: SubmissionDetail | null;
   review?: TeacherReviewDetail | null;
+  evaluation?: EvaluationResultDetail | null;
 }>();
 </script>
 
@@ -42,6 +43,16 @@ defineProps<{
         <p>{{ item.extraction.text_excerpt || item.extraction.error || '暂无摘要' }}</p>
       </article>
     </div>
+
+    <section v-if="evaluation?.log" class="artifact-list">
+      <article class="artifact-item">
+        <div>
+          <strong>AI 调用摘要</strong>
+          <span>{{ evaluation.log.provider }} / {{ evaluation.log.model || 'unknown model' }}</span>
+        </div>
+        <p>{{ evaluation.result.llm_summary || '暂无模型总结' }}</p>
+      </article>
+    </section>
 
     <p v-else class="muted">输入提交 ID 后可查看附件、解析摘要和已发布评价。</p>
   </section>

@@ -173,6 +173,7 @@ type Repository interface {
 	GetEvaluationContext(context.Context, string) (EvaluationContext, error)
 	CreateInitialEvaluation(context.Context, EvaluationResult, []RuleCheckFinding, []MetricScore, *LLMCallLog, AuditEntry) (EvaluationResultDetail, error)
 	GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error)
+	GetLatestLLMCallLog(context.Context, string) (*LLMCallLog, error)
 	EvaluationResultSubmissionID(context.Context, string) (string, error)
 	UpsertTeacherReview(context.Context, TeacherReview, []TeacherMetricScore, AuditEntry) (TeacherReviewDetail, error)
 	PublishTeacherReview(context.Context, string, string, AuditEntry) (TeacherReviewDetail, error)
