@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { resolveArtifactEvidenceOutlines } from '../lib/evidence';
-import type { SubmissionDetail, TeacherReviewDetail } from '../lib/types';
+import { collectEvaluationEvidenceRefs, resolveArtifactEvidenceOutlines } from '../lib/evidence';
+import type { EvaluationResultDetail, SubmissionDetail, TeacherReviewDetail } from '../lib/types';
 
 const props = defineProps<{
   detail: SubmissionDetail | null;
   review?: TeacherReviewDetail | null;
+  evaluation?: EvaluationResultDetail | null;
 }>();
 
 const evidenceOutlines = computed(() => resolveArtifactEvidenceOutlines(props.detail));
+const aiEvidenceRefs = computed(() => new Set(collectEvaluationEvidenceRefs(props.evaluation ?? null)));
 </script>
 
 <template>
@@ -54,16 +56,18 @@ const evidenceOutlines = computed(() => resolveArtifactEvidenceOutlines(props.de
           <span>{{ outline.sections.length }} sections / {{ outline.evidence.length }} evidence</span>
         </div>
         <div v-if="outline.sections.length" class="snippet-list">
-          <article v-for="snippet in outline.sections" :key="snippet.ref" class="snippet-card">
+          <article v-for="snippet in outline.sections" :key="snippet.ref" :class="['snippet-card', { highlight: aiEvidenceRefs.has(snippet.ref) }]">
             <strong>{{ snippet.title }}</strong>
             <small>{{ snippet.ref }}</small>
+            <span v-if="aiEvidenceRefs.has(snippet.ref)" class="chip">AI 引用</span>
             <p>{{ snippet.text }}</p>
           </article>
         </div>
         <div v-if="outline.evidence.length" class="snippet-list">
-          <article v-for="snippet in outline.evidence" :key="snippet.ref" class="snippet-card">
+          <article v-for="snippet in outline.evidence" :key="snippet.ref" :class="['snippet-card', { highlight: aiEvidenceRefs.has(snippet.ref) }]">
             <strong>{{ snippet.title }}</strong>
             <small>{{ snippet.ref }}</small>
+            <span v-if="aiEvidenceRefs.has(snippet.ref)" class="chip">AI 引用</span>
             <p>{{ snippet.text }}</p>
           </article>
         </div>
