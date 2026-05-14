@@ -80,7 +80,8 @@ const reportFindingSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(()
     artifacts: props.report.artifacts,
   };
   for (const finding of props.report.evaluation.findings) {
-    entries[finding.id] = finding.evidence_ref ? resolveEvidenceSnippets(detail, [finding.evidence_ref]) : [];
+    const ref = finding.evidence_ref?.trim();
+    entries[finding.id] = ref ? resolveEvidenceSnippets(detail, [ref]) : [];
   }
   return entries;
 });
