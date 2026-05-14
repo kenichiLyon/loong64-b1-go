@@ -155,6 +155,13 @@ func TestCreateExperimentSummaryExportXLSXWritesWorkbook(t *testing.T) {
 	if value != "实验统计报表" {
 		t.Fatalf("unexpected workbook content: %q", value)
 	}
+	evidenceValue, err := workbook.GetCellValue("EvidenceRefs", "A2")
+	if err != nil {
+		t.Fatalf("read evidence workbook cell: %v", err)
+	}
+	if evidenceValue != "artifact:artifact-1#section:1" {
+		t.Fatalf("unexpected evidence workbook content: %q", evidenceValue)
+	}
 }
 
 func TestGetExperimentReportSummaryAggregatesPublishedReviews(t *testing.T) {
@@ -181,6 +188,9 @@ func TestGetExperimentReportSummaryAggregatesPublishedReviews(t *testing.T) {
 	}
 	if len(summary.MetricAverages) != 2 || summary.MetricAverages[0].Count != 2 {
 		t.Fatalf("unexpected metrics: %+v", summary.MetricAverages)
+	}
+	if len(summary.EvidenceRefCounts) != 3 || summary.EvidenceRefCounts[0].Reference != "artifact:artifact-1#section:1" || summary.EvidenceRefCounts[0].Count != 2 {
+		t.Fatalf("unexpected evidence refs: %+v", summary.EvidenceRefCounts)
 	}
 }
 
@@ -209,6 +219,9 @@ func TestGetCourseReportSummaryAggregatesExperiments(t *testing.T) {
 	if len(summary.Experiments) != 2 || len(summary.MetricAverages) != 2 {
 		t.Fatalf("unexpected nested summaries: %+v", summary)
 	}
+	if len(summary.EvidenceRefCounts) != 3 || summary.EvidenceRefCounts[0].Reference != "artifact:artifact-1#section:1" || summary.EvidenceRefCounts[0].Count != 3 {
+		t.Fatalf("unexpected course evidence refs: %+v", summary.EvidenceRefCounts)
+	}
 }
 
 func TestCreateCourseSummaryExportCSVWritesFile(t *testing.T) {
@@ -232,7 +245,7 @@ func TestCreateCourseSummaryExportCSVWritesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export file: %v", err)
 	}
-	if export.ReportType != ReportTypeCourseSummary || export.ScopeType != ReportScopeCourse || !strings.Contains(string(content), "课程统计报表") || !strings.Contains(string(content), "experiment-2") {
+	if export.ReportType != ReportTypeCourseSummary || export.ScopeType != ReportScopeCourse || !strings.Contains(string(content), "课程统计报表") || !strings.Contains(string(content), "experiment-2") || !strings.Contains(string(content), "artifact:artifact-1#section:1") {
 		t.Fatalf("unexpected course export: %+v content=%q", export, string(content[:min(len(content), 96)]))
 	}
 }
@@ -273,14 +286,22 @@ func validReportEvaluationDetail() EvaluationResultDetail {
 func validExperimentReportDataset() map[string]experimentReportItem {
 	return map[string]experimentReportItem{
 		"submission-1": {
-			detail:     SubmissionDetail{Submission: Submission{ID: "submission-1", ExperimentID: "experiment-1", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindReport}, Extraction: ExtractedContent{Status: "succeeded"}}}},
-			review:     TeacherReviewDetail{Review: TeacherReview{ID: "review-1", SubmissionID: "submission-1", Status: TeacherReviewStatusPublished, TotalScoreBPS: 8000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 8, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 16, MaxScore: 20, WeightBPS: 6000}}},
-			evaluation: EvaluationResultDetail{Result: EvaluationResult{ID: "evaluation-1"}, Findings: []RuleCheckFinding{{Category: "steps", Severity: FindingMedium, Message: "步骤说明略少"}}},
+			detail: SubmissionDetail{Submission: Submission{ID: "submission-1", ExperimentID: "experiment-1", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindReport}, Extraction: ExtractedContent{Status: "succeeded"}}}},
+			review: TeacherReviewDetail{Review: TeacherReview{ID: "review-1", SubmissionID: "submission-1", Status: TeacherReviewStatusPublished, TotalScoreBPS: 8000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 8, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 16, MaxScore: 20, WeightBPS: 6000}}},
+			evaluation: EvaluationResultDetail{
+				Result:   EvaluationResult{ID: "evaluation-1"},
+				Findings: []RuleCheckFinding{{Category: "steps", Severity: FindingMedium, Message: "步骤说明略少", EvidenceRef: "artifact:artifact-1#section:2"}},
+				Scores:   []MetricScore{{MetricCode: "quality", EvidenceRefs: mustJSON([]string{"artifact:artifact-1#section:1"})}},
+			},
 		},
 		"submission-2": {
-			detail:     SubmissionDetail{Submission: Submission{ID: "submission-2", ExperimentID: "experiment-1", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindDocument}, Extraction: ExtractedContent{Status: "failed"}}}},
-			review:     TeacherReviewDetail{Review: TeacherReview{ID: "review-2", SubmissionID: "submission-2", Status: TeacherReviewStatusPublished, TotalScoreBPS: 9000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 9, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 18, MaxScore: 20, WeightBPS: 6000}}},
-			evaluation: EvaluationResultDetail{Result: EvaluationResult{ID: "evaluation-2"}, Findings: []RuleCheckFinding{{Category: "parse", Severity: FindingLow, Message: "附件解析失败"}}},
+			detail: SubmissionDetail{Submission: Submission{ID: "submission-2", ExperimentID: "experiment-1", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindDocument}, Extraction: ExtractedContent{Status: "failed"}}}},
+			review: TeacherReviewDetail{Review: TeacherReview{ID: "review-2", SubmissionID: "submission-2", Status: TeacherReviewStatusPublished, TotalScoreBPS: 9000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 9, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 18, MaxScore: 20, WeightBPS: 6000}}},
+			evaluation: EvaluationResultDetail{
+				Result:   EvaluationResult{ID: "evaluation-2"},
+				Findings: []RuleCheckFinding{{Category: "parse", Severity: FindingLow, Message: "附件解析失败", EvidenceRef: "artifact:artifact-1#section:1"}},
+				Scores:   []MetricScore{{MetricCode: "docs", EvidenceRefs: mustJSON([]string{"artifact:artifact-1#evidence:1"})}},
+			},
 		},
 	}
 }
@@ -288,9 +309,12 @@ func validExperimentReportDataset() map[string]experimentReportItem {
 func validCourseReportDataset() map[string]experimentReportItem {
 	dataset := validExperimentReportDataset()
 	dataset["submission-3"] = experimentReportItem{
-		detail:     SubmissionDetail{Submission: Submission{ID: "submission-3", ExperimentID: "experiment-2", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindReport}, Extraction: ExtractedContent{Status: "succeeded"}}}},
-		review:     TeacherReviewDetail{Review: TeacherReview{ID: "review-3", SubmissionID: "submission-3", Status: TeacherReviewStatusPublished, TotalScoreBPS: 7000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 7, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 14, MaxScore: 20, WeightBPS: 6000}}},
-		evaluation: EvaluationResultDetail{Result: EvaluationResult{ID: "evaluation-3"}, Findings: []RuleCheckFinding{{Category: "logic", Severity: FindingHigh, Message: "关键结论缺少证据"}}},
+		detail: SubmissionDetail{Submission: Submission{ID: "submission-3", ExperimentID: "experiment-2", Status: "submitted"}, Artifacts: []ArtifactWithExtraction{{Artifact: Artifact{Kind: ArtifactKindReport}, Extraction: ExtractedContent{Status: "succeeded"}}}},
+		review: TeacherReviewDetail{Review: TeacherReview{ID: "review-3", SubmissionID: "submission-3", Status: TeacherReviewStatusPublished, TotalScoreBPS: 7000}, Scores: []TeacherMetricScore{{MetricCode: "docs", FinalScore: 7, MaxScore: 10, WeightBPS: 4000}, {MetricCode: "quality", FinalScore: 14, MaxScore: 20, WeightBPS: 6000}}},
+		evaluation: EvaluationResultDetail{
+			Result:   EvaluationResult{ID: "evaluation-3"},
+			Findings: []RuleCheckFinding{{Category: "logic", Severity: FindingHigh, Message: "关键结论缺少证据", EvidenceRef: "artifact:artifact-1#section:1"}},
+		},
 	}
 	return dataset
 }

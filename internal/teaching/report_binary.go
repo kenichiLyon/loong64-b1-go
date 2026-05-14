@@ -104,6 +104,15 @@ func renderExperimentSummaryXLSX(summary ExperimentReportSummary) ([]byte, error
 		findingRows = append(findingRows, []any{finding.Severity, finding.Category, finding.Count})
 	}
 	writeRows(file, findings, findingRows)
+	if len(summary.EvidenceRefCounts) > 0 {
+		evidence := "EvidenceRefs"
+		_, _ = file.NewSheet(evidence)
+		evidenceRows := [][]any{{"证据引用", "次数"}}
+		for _, item := range summary.EvidenceRefCounts {
+			evidenceRows = append(evidenceRows, []any{item.Reference, item.Count})
+		}
+		writeRows(file, evidence, evidenceRows)
+	}
 	return workbookBytes(file)
 }
 
@@ -155,6 +164,15 @@ func renderCourseSummaryXLSX(summary CourseReportSummary) ([]byte, error) {
 		findingRows = append(findingRows, []any{finding.Severity, finding.Category, finding.Count})
 	}
 	writeRows(file, findings, findingRows)
+	if len(summary.EvidenceRefCounts) > 0 {
+		evidence := "EvidenceRefs"
+		_, _ = file.NewSheet(evidence)
+		evidenceRows := [][]any{{"证据引用", "次数"}}
+		for _, item := range summary.EvidenceRefCounts {
+			evidenceRows = append(evidenceRows, []any{item.Reference, item.Count})
+		}
+		writeRows(file, evidence, evidenceRows)
+	}
 	return workbookBytes(file)
 }
 
@@ -203,6 +221,7 @@ func renderExperimentSummaryPDF(summary ExperimentReportSummary) ([]byte, error)
 	writePDFSection(doc, "分数分布", formatBuckets(summary.ScoreBuckets))
 	writePDFSection(doc, "指标均值", formatMetricAverages(summary.MetricAverages))
 	writePDFSection(doc, "常见问题", formatFindingCounts(summary.FindingCounts))
+	writePDFSection(doc, "AI 证据引用概览", formatEvidenceRefCounts(summary.EvidenceRefCounts))
 	return pdfBytes(doc)
 }
 
@@ -227,6 +246,7 @@ func renderCourseSummaryPDF(summary CourseReportSummary) ([]byte, error) {
 	writePDFSection(doc, "分数分布", formatBuckets(summary.ScoreBuckets))
 	writePDFSection(doc, "指标均值", formatMetricAverages(summary.MetricAverages))
 	writePDFSection(doc, "常见问题", formatFindingCounts(summary.FindingCounts))
+	writePDFSection(doc, "AI 证据引用概览", formatEvidenceRefCounts(summary.EvidenceRefCounts))
 	return pdfBytes(doc)
 }
 
@@ -319,6 +339,14 @@ func formatFindingCounts(findings []FindingCount) string {
 	var parts []string
 	for _, finding := range findings {
 		parts = append(parts, fmt.Sprintf("%s/%s: %d", finding.Severity, finding.Category, finding.Count))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func formatEvidenceRefCounts(refs []EvidenceRefCount) string {
+	var parts []string
+	for _, item := range refs {
+		parts = append(parts, fmt.Sprintf("%s: %d", item.Reference, item.Count))
 	}
 	return strings.Join(parts, "\n")
 }

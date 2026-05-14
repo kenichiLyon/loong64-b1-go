@@ -123,6 +123,12 @@ function uniqueEvidenceRefs(report: SubmissionReport | null) {
         <span>{{ metric.metric_code }}</span>
         <strong>{{ metric.average_score }}/{{ metric.max_score }} · {{ percent(metric.average_percent_bps) }}</strong>
       </article>
+      <div v-if="summary.evidence_ref_counts.length" class="summary-block nested-block">
+        <h4>AI 证据引用概览</h4>
+        <div class="chip-list">
+          <span v-for="item in summary.evidence_ref_counts" :key="item.reference" class="chip">{{ item.reference }} · {{ item.count }}</span>
+        </div>
+      </div>
     </div>
 
     <div v-if="courseSummary" class="summary-block">
@@ -152,6 +158,12 @@ function uniqueEvidenceRefs(report: SubmissionReport | null) {
         <span>{{ experiment.experiment_id }}</span>
         <strong>{{ percent(experiment.average_score_bps) }} · {{ experiment.published_review_count }}/{{ experiment.submission_count }}</strong>
       </article>
+      <div v-if="courseSummary.evidence_ref_counts.length" class="summary-block nested-block">
+        <h4>课程级 AI 证据引用概览</h4>
+        <div class="chip-list">
+          <span v-for="item in courseSummary.evidence_ref_counts" :key="item.reference" class="chip">{{ item.reference }} · {{ item.count }}</span>
+        </div>
+      </div>
     </div>
 
     <div v-if="exportResult" :class="['export-result', exportResult.status]">

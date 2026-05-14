@@ -212,6 +212,11 @@ export interface FindingCount {
   count: number;
 }
 
+export interface EvidenceRefCount {
+  reference: string;
+  count: number;
+}
+
 export interface ExperimentReportSummary {
   experiment_id: string;
   submission_count: number;
@@ -225,6 +230,7 @@ export interface ExperimentReportSummary {
   artifact_status_count: Record<string, number>;
   metric_averages: MetricAverage[];
   finding_counts: FindingCount[];
+  evidence_ref_counts: EvidenceRefCount[];
   generated_at: string;
 }
 
@@ -242,6 +248,7 @@ export interface CourseReportSummary {
   artifact_status_count: Record<string, number>;
   metric_averages: MetricAverage[];
   finding_counts: FindingCount[];
+  evidence_ref_counts: EvidenceRefCount[];
   experiments: ExperimentReportSummary[];
   generated_at: string;
 }

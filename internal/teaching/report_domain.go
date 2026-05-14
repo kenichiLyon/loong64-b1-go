@@ -51,19 +51,20 @@ type SubmissionReport struct {
 }
 
 type ExperimentReportSummary struct {
-	ExperimentID          string          `json:"experiment_id"`
-	SubmissionCount       int             `json:"submission_count"`
-	SubmittedCount        int             `json:"submitted_count"`
-	PublishedReviewCount  int             `json:"published_review_count"`
-	AverageScoreBPS       int             `json:"average_score_bps"`
-	MinScoreBPS           int             `json:"min_score_bps"`
-	MaxScoreBPS           int             `json:"max_score_bps"`
-	ScoreBuckets          map[string]int  `json:"score_buckets"`
-	SubmissionStatusCount map[string]int  `json:"submission_status_count"`
-	ArtifactStatusCount   map[string]int  `json:"artifact_status_count"`
-	MetricAverages        []MetricAverage `json:"metric_averages"`
-	FindingCounts         []FindingCount  `json:"finding_counts"`
-	GeneratedAt           time.Time       `json:"generated_at"`
+	ExperimentID          string             `json:"experiment_id"`
+	SubmissionCount       int                `json:"submission_count"`
+	SubmittedCount        int                `json:"submitted_count"`
+	PublishedReviewCount  int                `json:"published_review_count"`
+	AverageScoreBPS       int                `json:"average_score_bps"`
+	MinScoreBPS           int                `json:"min_score_bps"`
+	MaxScoreBPS           int                `json:"max_score_bps"`
+	ScoreBuckets          map[string]int     `json:"score_buckets"`
+	SubmissionStatusCount map[string]int     `json:"submission_status_count"`
+	ArtifactStatusCount   map[string]int     `json:"artifact_status_count"`
+	MetricAverages        []MetricAverage    `json:"metric_averages"`
+	FindingCounts         []FindingCount     `json:"finding_counts"`
+	EvidenceRefCounts     []EvidenceRefCount `json:"evidence_ref_counts"`
+	GeneratedAt           time.Time          `json:"generated_at"`
 	scoreSumBPS           int
 }
 
@@ -81,6 +82,7 @@ type CourseReportSummary struct {
 	ArtifactStatusCount   map[string]int            `json:"artifact_status_count"`
 	MetricAverages        []MetricAverage           `json:"metric_averages"`
 	FindingCounts         []FindingCount            `json:"finding_counts"`
+	EvidenceRefCounts     []EvidenceRefCount        `json:"evidence_ref_counts"`
 	Experiments           []ExperimentReportSummary `json:"experiments"`
 	GeneratedAt           time.Time                 `json:"generated_at"`
 }
@@ -97,6 +99,11 @@ type FindingCount struct {
 	Category string          `json:"category"`
 	Severity FindingSeverity `json:"severity"`
 	Count    int             `json:"count"`
+}
+
+type EvidenceRefCount struct {
+	Reference string `json:"reference"`
+	Count     int    `json:"count"`
 }
 
 type ReportExport struct {
