@@ -19,6 +19,20 @@ const state = reactive({
 });
 
 const published = computed(() => props.review?.review.status === 'published');
+const evidenceRefs = computed(() => {
+  if (!props.evaluation) {
+    return [];
+  }
+  const refs = new Set<string>();
+  for (const score of props.evaluation.scores) {
+    for (const ref of score.evidence_refs ?? []) {
+      if (ref.trim() !== '') {
+        refs.add(ref);
+      }
+    }
+  }
+  return Array.from(refs);
+});
 
 watch(
   () => [props.evaluation, props.review] as const,
@@ -98,6 +112,13 @@ function save() {
       教师总评
       <textarea v-model="state.teacher_comment" :disabled="published" placeholder="给学生的综合反馈" />
     </label>
+
+    <section v-if="evidenceRefs.length" class="evidence-card">
+      <p class="eyebrow">AI 引用证据</p>
+      <div class="chip-list">
+        <span v-for="ref in evidenceRefs" :key="ref" class="chip">{{ ref }}</span>
+      </div>
+    </section>
 
     <div class="button-row">
       <button :disabled="busy || published || !state.scores.length" @click="save">保存草稿</button>

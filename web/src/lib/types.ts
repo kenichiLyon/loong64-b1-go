@@ -147,6 +147,7 @@ export interface MetricScore {
   max_score: number;
   confidence_bps: number;
   rationale: string;
+  evidence_refs?: string[];
 }
 
 export interface EvaluationResultDetail {
