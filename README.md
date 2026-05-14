@@ -186,6 +186,7 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 - MVP 范围：`docs/MVP_DELIVERY.md`
 - UAT 手册：`docs/UAT_CHECKLIST.md`
 - 本地 UAT 记录：`docs/UAT_LOCAL_RESULTS.md`
+- 安全与会话验证记录：`docs/SECURITY_VALIDATION_RESULTS.md`
 - 银河麒麟部署：`docs/DEPLOY_KYLIN.md`
 - Python 微服务：`docs/PYTHON_AI_MIDDLEWARE.md`
 - Stage 7 部署验证：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
