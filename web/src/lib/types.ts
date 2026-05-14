@@ -96,6 +96,7 @@ export interface Artifact {
   byte_size: number;
   status: string;
   source_url?: string;
+  metadata?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -104,6 +105,7 @@ export interface ExtractedContent {
   artifact_id: string;
   status: string;
   text_excerpt?: string;
+  metadata?: Record<string, unknown>;
   error?: string;
 }
 

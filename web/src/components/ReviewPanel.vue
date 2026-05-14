@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
-import type { EvaluationResultDetail, TeacherMetricScore, TeacherReviewDetail } from '../lib/types';
+import { resolveEvidenceSnippets } from '../lib/evidence';
+import type { EvaluationResultDetail, SubmissionDetail, TeacherMetricScore, TeacherReviewDetail } from '../lib/types';
 
 const props = defineProps<{
   evaluation: EvaluationResultDetail | null;
   review: TeacherReviewDetail | null;
+  detail: SubmissionDetail | null;
   busy: boolean;
 }>();
 
@@ -38,6 +40,8 @@ const evidenceRefs = computed(() => {
   }
   return Array.from(refs);
 });
+
+const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, evidenceRefs.value));
 
 watch(
   () => [props.evaluation, props.review] as const,
@@ -122,6 +126,13 @@ function save() {
       <p class="eyebrow">AI 引用证据</p>
       <div class="chip-list">
         <span v-for="ref in evidenceRefs" :key="ref" class="chip">{{ ref }}</span>
+      </div>
+      <div v-if="evidenceSnippets.length" class="snippet-list">
+        <article v-for="snippet in evidenceSnippets" :key="snippet.ref" class="snippet-card">
+          <strong>{{ snippet.title }}</strong>
+          <small>{{ snippet.ref }}</small>
+          <p>{{ snippet.text }}</p>
+        </article>
       </div>
     </section>
 
