@@ -32,7 +32,7 @@ fi
 
 if [ ! -f "$APP_CONFIG/python-ai-gateway.env" ]; then
   install -o root -g "$APP_GROUP" -m 0640 deploy/kylin/env/python-ai-gateway.env.example "$APP_CONFIG/python-ai-gateway.env"
-  echo "Created $APP_CONFIG/python-ai-gateway.env; edit model gateway settings before starting."
+  echo "Created $APP_CONFIG/python-ai-gateway.env; copy Python AI gateway code into $APP_HOME/python-ai-gateway, then edit model gateway settings before starting."
 fi
 
 install -o root -g root -m 0644 deploy/kylin/systemd/loong64-b1-go.service /etc/systemd/system/loong64-b1-go.service
@@ -41,7 +41,10 @@ install -o root -g root -m 0644 deploy/kylin/systemd/python-ai-gateway.service /
 install -o root -g root -m 0644 deploy/kylin/systemd/python-ai-gateway.service /etc/systemd/system/python-ai-gateway.service
 
 systemctl daemon-reload
-echo "Systemd units installed. Copy the Go release bundle and Python gateway code into $APP_HOME, then run:"
+echo "Systemd units installed."
+echo "Copy the Go release bundle into $APP_HOME/bin."
+echo "Copy the Python AI gateway code into $APP_HOME/python-ai-gateway."
+echo "Then run:"
 echo "  systemctl enable --now python-ai-gateway.service"
 echo "  systemctl start loong64-b1-migrate.service"
 echo "  systemctl enable --now loong64-b1-go.service"

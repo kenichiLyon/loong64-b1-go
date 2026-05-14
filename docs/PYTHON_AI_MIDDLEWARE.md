@@ -99,6 +99,7 @@ Go 主服务继续负责：
 - `python-ai-gateway/ai_gateway/evaluator.py`
 - `python-ai-gateway/ai_gateway/retrieval.py`
 - `python-ai-gateway/pyproject.toml`
+- `python-ai-gateway/requirements.txt`
 
 ## 4. 本地运行
 
@@ -128,8 +129,25 @@ uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 最小语法验证：
 
 ```bash
+pip install -r python-ai-gateway/requirements.txt
 python -m py_compile python-ai-gateway/ai_gateway/app.py python-ai-gateway/ai_gateway/models.py python-ai-gateway/ai_gateway/parser.py python-ai-gateway/ai_gateway/evaluator.py python-ai-gateway/ai_gateway/retrieval.py
 ```
+
+## 5.1 依赖安装说明
+
+当前仓库不要求使用 `uv` 这类额外 Python 包管理器。  
+默认可复现安装方式是：
+
+```bash
+pip install -r requirements.txt
+```
+
+其中：
+
+- `requirements.txt` 用于直接安装和部署
+- `pyproject.toml` 继续保留项目元数据与源码依赖声明
+
+如果后续调整 Python 依赖，需要同步更新这两个文件。
 
 推荐调试顺序：
 

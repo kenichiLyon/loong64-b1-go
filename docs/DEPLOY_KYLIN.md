@@ -145,13 +145,19 @@ Python 微服务代码目录：
 cd /opt/loong64-b1-go/python-ai-gateway
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -r requirements.txt
 ```
 
 如果目标机没有外网：
 
 - 需要预先准备 Python wheel 缓存或内网源
 - 这是部署时必须留档的事项
+
+当前推荐的可复现安装方式就是：
+
+```bash
+pip install -r requirements.txt
+```
 
 ## 6. Go 环境变量
 
