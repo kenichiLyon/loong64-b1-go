@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { resolveEvidenceSnippets } from '../lib/evidence';
 import type { CourseReportSummary, ExperimentReportSummary, ReportExport, SubmissionReport } from '../lib/types';
+import type { EvidenceSnippet } from '../lib/evidence';
 
 const props = defineProps<{
   report: SubmissionReport | null;
@@ -54,6 +55,35 @@ const reportEvidenceSnippets = computed(() => {
     submission: props.report.submission,
     artifacts: props.report.artifacts,
   }, reportEvidenceRefs.value);
+});
+const reportMetricSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  if (!props.report?.evaluation) {
+    return entries;
+  }
+  const detail = {
+    submission: props.report.submission,
+    artifacts: props.report.artifacts,
+  };
+  for (const score of props.report.evaluation.scores) {
+    entries[score.id] = resolveEvidenceSnippets(detail, score.evidence_refs ?? []);
+  }
+  return entries;
+});
+const reportFindingSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  if (!props.report?.evaluation) {
+    return entries;
+  }
+  const detail = {
+    submission: props.report.submission,
+    artifacts: props.report.artifacts,
+  };
+  for (const finding of props.report.evaluation.findings) {
+    const ref = finding.evidence_ref?.trim();
+    entries[finding.id] = ref ? resolveEvidenceSnippets(detail, [ref]) : [];
+  }
+  return entries;
 });
 </script>
 
@@ -112,6 +142,41 @@ const reportEvidenceSnippets = computed(() => {
           <strong>{{ snippet.title }}</strong>
           <small>{{ snippet.ref }}</small>
           <p>{{ snippet.text }}</p>
+        </article>
+      </div>
+    </div>
+
+    <div v-if="report?.evaluation" class="summary-block">
+      <h3>AI 初评预览</h3>
+      <div v-if="report.evaluation.findings.length" class="finding-list">
+        <article v-for="finding in report.evaluation.findings" :key="finding.id" :class="['finding', finding.severity]">
+          <strong>{{ finding.severity }} / {{ finding.category }}</strong>
+          <p>{{ finding.message }}</p>
+          <small v-if="finding.evidence_ref">{{ finding.evidence_ref }}</small>
+          <div v-if="reportFindingSnippetsByID[finding.id]?.length" class="snippet-list inline-snippets">
+            <article v-for="snippet in reportFindingSnippetsByID[finding.id]" :key="snippet.ref" class="snippet-card">
+              <strong>{{ snippet.title }}</strong>
+              <small>{{ snippet.ref }}</small>
+              <p>{{ snippet.text }}</p>
+            </article>
+          </div>
+        </article>
+      </div>
+      <div v-if="report.evaluation.scores.length" class="evaluation-grid">
+        <article v-for="score in report.evaluation.scores" :key="score.id" class="metric-card">
+          <span>{{ score.source }}</span>
+          <strong>{{ score.metric_code }}：{{ score.suggested_score }}/{{ score.max_score }}</strong>
+          <p>{{ score.rationale }}</p>
+          <div v-if="score.evidence_refs?.length" class="chip-list">
+            <span v-for="ref in score.evidence_refs.filter((item) => item.trim() !== '')" :key="ref" class="chip">{{ ref }}</span>
+          </div>
+          <div v-if="reportMetricSnippetsByID[score.id]?.length" class="snippet-list inline-snippets">
+            <article v-for="snippet in reportMetricSnippetsByID[score.id]" :key="snippet.ref" class="snippet-card">
+              <strong>{{ snippet.title }}</strong>
+              <small>{{ snippet.ref }}</small>
+              <p>{{ snippet.text }}</p>
+            </article>
+          </div>
         </article>
       </div>
     </div>
