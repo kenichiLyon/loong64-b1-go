@@ -1,422 +1,431 @@
-# loong64-b1-go 开发计划
+# loong64-b1-go 当前计划
 
-## 1. 摘要
+## 1. 项目目标
 
-本项目建设“基于大模型技术的软件实训教学结果检查评价与报表系统”，用于高校或职教软件实训课程的成果收集、自动解析、智能核查、多维评价、教师复核和报表导出。
+本项目要交付的是一个面向高校 / 职教软件实训课程的教学评价系统，覆盖：
 
-固定部署目标为 LoongArch 架构 + 银河麒麟高级服务器版；开发阶段使用 amd64 Windows + Linux，但每个阶段都必须保留 LoongArch 交叉编译和目标环境验证任务。
+- 学生提交成果
+- 系统解析材料
+- 规则核查
+- AI 初评
+- 教师复核与发布
+- 报表统计与导出
 
-首版交付形态为 PC Web B/S 系统：Go 后端提供 API、异步任务、文件解析、LLM Gateway 和报表导出；前端提供教师、学生、管理员工作台。大模型只作为初评与核查助手，最终成绩保留教师复核、主观评分和审计留痕。
+固定部署目标仍然是：
 
-## 2. 技术基线
+- `LoongArch + 银河麒麟高级服务器版`
 
-- 后端：Go 1.25+，默认标准库优先，必要时引入纯 Go 依赖。
-- API：REST + OpenAPI；后续可按需增加 SSE/WebSocket 展示任务进度。
-- 前端：Vue 3 + Vite + TypeScript，PC Web 优先，移动端做响应式适配，不开发原生 App。
-- 数据库：PostgreSQL，保存结构化业务数据、评分结果、任务状态和审计日志。
-- 文件存储：本地 ObjectStore 起步，目录化保存上传物、解析中间产物和报表文件，预留 MinIO/S3。
-- 大模型：OpenAI-compatible HTTP Gateway，支持云端模型、本地模型或学校内网模型服务。
-- 报表：HTML 报表视图 + Excel/PDF 异步导出，图表数据与导出条件可追溯。
-- 部署：systemd 非容器部署为主，Podman/Docker 方案为辅。
-- 版本控制：所有仓库变更必须通过 GitHub MCP commit 到 `kenichiLyon/loong64-b1-go`。
+当前项目已经不再适合继续用“纯 Go 自己硬扛全部 AI 能力”的思路推进。  
+现在的正确定位是：
 
-## 3. 总体架构
+- `Go` 负责业务主系统
+- `Python` 负责推理微服务
 
-系统分为六条主链路：
+Python 的引入不是为了替代 Go，而是为了补齐 Go 在 AI 生态上的客观短板，尤其是：
 
-1. 用户与教学管理：管理员维护账号、角色、课程、班级、选课和教师授权。
-2. 实训任务与评价模板：教师创建实训要求、提交规范、评价指标、权重和评分规则版本。
-3. 成果上传与解析：学生上传 Word、PDF、报告、截图、代码包或 Git 链接，系统保存文件并创建解析任务。
-4. 智能核查与初评：规则引擎检查提交完整性、步骤覆盖、逻辑风险和格式问题，LLM Gateway 对脱敏证据进行初评。
-5. 教师复核与发布：教师查看证据、AI 建议、规则扣分点，逐项改分、填写主观评价并发布结果。
-6. 报表统计与导出：生成个人评价报告、班级统计、课程统计和常见问题分析，支持 Excel/PDF 导出。
+- 本地大模型适配
+- 文档解析生态
+- 检索 / RAG
+- 推理编排与结构化输出清洗
 
-## 4. 核心数据对象
+---
 
-- `users`：管理员、教师、学生账号，保存角色和状态。
-- `courses`、`classes`、`enrollments`：课程、班级和选课关系。
-- `experiments`：实训任务、提交要求、截止时间、可上传类型。
-- `rubric_templates`、`rubric_metrics`：评价模板版本、指标、权重、评分说明。
-- `submissions`：学生或小组提交记录，保存提交状态和当前有效版本。
-- `artifacts`：上传文件或 Git 链接元信息，保存 hash、大小、MIME、对象存储 key。
-- `extracted_contents`：文档文本、截图 OCR、代码结构、报告章节、关键证据片段。
-- `rule_check_findings`：步骤缺失、逻辑漏洞、格式问题、风险标签和证据来源。
-- `evaluation_results`、`metric_scores`：AI 初评、规则分、指标建议分、置信度和证据引用；教师分、最终分、评语和发布状态在阶段 5 引入。
-- `llm_call_logs`：模型、Prompt 版本、输入摘要 hash、结构化输出、耗时、错误状态。
-- `report_exports`：报表类型、筛选条件、文件格式、对象存储 key、生成状态。
-- `audit_logs`：上传、解析、评价、改分、发布、导出等关键操作留痕。
-- `jobs`：解析、核查、LLM 评价和报表导出等异步任务状态。
+## 2. 当前架构
 
-## 5. 接口与功能边界
+### 2.1 总体分层
 
-### 5.1 用户侧 PC Web
+系统现在分成 5 层：
 
-- 学生：查看实训任务、上传成果、查看解析状态、查看已发布评价报告。
-- 教师：创建任务、配置指标权重、查看提交进度、复核 AI 初评、发布成绩、导出报表。
-- 管理员：维护用户、班级、课程、系统配置、模型配置和审计查询。
+1. `Web 前端`
+2. `Go 主服务`
+3. `Python 推理微服务`
+4. `数据库 / 对象存储`
+5. `模型服务`
 
-### 5.2 LLM Gateway
+### 2.2 Go 主服务职责
 
-- 统一接口：`EvaluateSubmission(ctx, request) -> structured result`。
-- Provider：OpenAI-compatible API，参数包括 base URL、model、API key、timeout、max tokens。
-- 输入策略：默认发送脱敏摘要、评分规则、证据片段和任务要求，不发送原始文件。
-- 输出策略：必须返回 JSON，包含指标建议分、理由、证据引用、风险标签、置信度。
-- 失败策略：schema 校验失败、超时、限流或模型错误时进入重试或教师待复核。
+Go 是系统的主控层，负责：
 
-### 5.3 文件解析
+- 登录、会话、权限、CSRF、安全边界
+- 用户、课程、班级、实验、模板、提交、复核、发布
+- 对象存储、数据库、审计日志、报表导出
+- 对 Python 微服务的内部 HTTP 调用
+- 最终业务真相源的持久化
 
-- Word/PDF：提取正文、标题层级、表格摘要和关键截图引用。
-- 报告类文档：识别实验目的、环境、步骤、结果、问题分析、总结等章节。
-- 截图：保存图片元信息，OCR 作为可选能力；目标环境不可用时保留人工查看入口。
-- 代码包：只做静态结构检查、文件清单、语言识别、README/配置/测试文件存在性检查；MVP 不自动执行学生代码。
-- Git 链接：先记录 URL 和提交信息；如需拉取，必须走独立 worker 和白名单策略。
+一句话：
 
-### 5.4 报表导出
+- `Go 负责系统状态和业务规则`
 
-- 学生个人报告：最终分、指标分、AI 建议摘要、教师评语、主要证据和改进建议。
-- 班级统计：分数分布、指标均值、提交完成率、常见问题 Top N、异常提交列表。
-- 课程统计：跨班级对比、任务完成情况、模型初评与教师改分差异。
-- Excel：结构化数据表、统计汇总、必要图表数据。
-- PDF：面向归档和汇报，必须支持中文字体；图表以可验证方式嵌入或降级为表格。
+### 2.3 Python 推理微服务职责
 
-## 6. 阶段计划与验收
+Python 是内部 AI 能力层，负责：
 
-### 阶段 0：仓库治理与初始骨架
+- `parse-artifact`
+- `evaluate-submission`
+- `build-retrieval-index`
+- `query-retrieval`
+- 本地模型 / OpenAI-compatible 模型调用
+- 检索上下文构建
+- 结构化输出规范化与防御性校验
 
-目标：创建 `loong64-b1-go` 私有远端仓库，固化 AGENT 流程和完整计划，提交最小 Go 服务骨架。
+一句话：
+
+- `Python 负责 AI-heavy 能力，不负责业务状态`
+
+### 2.4 数据层职责
+
+数据库保存：
+
+- 用户与教学关系
+- 提交记录
+- 评价结果
+- 教师复核结果
+- 导出记录
+- 审计日志
+- LLM 调用日志
+
+对象存储保存：
+
+- 上传附件
+- 解析中间产物
+- 报表导出文件
+
+### 2.5 模型层职责
+
+模型层通过 OpenAI-compatible 接口接入，可来自：
+
+- 本地大模型服务
+- 校内部署模型网关
+- 云端模型网关
+
+这里的关键原则是：
+
+- `业务模块不能直接绑定具体模型 SDK`
+- `模型接入优先放在 Python 推理微服务内部`
+
+---
+
+## 3. 当前代码结构
+
+### 3.1 Go 侧
+
+- `cmd/`
+  - `server`
+  - `migrate`
+- `internal/api`
+  - REST API / middleware / handler
+- `internal/authn`
+  - 登录 / 会话 / actor 解析
+- `internal/teaching`
+  - 教学域主流程
+- `internal/aigateway`
+  - Go -> Python 微服务 client
+- `internal/storage`
+  - ObjectStore
+- `internal/jobs`
+  - 异步任务模型
+
+### 3.2 Python 侧
+
+- `python-ai-gateway/ai_gateway/app.py`
+  - FastAPI 入口
+- `python-ai-gateway/ai_gateway/parser.py`
+  - 文档/附件解析
+- `python-ai-gateway/ai_gateway/evaluator.py`
+  - 评分请求组装、模型调用、结构化输出
+- `python-ai-gateway/ai_gateway/retrieval.py`
+  - 检索索引与查询
+- `python-ai-gateway/ai_gateway/models.py`
+  - 请求 / 响应模型
+
+### 3.3 当前内部接口
+
+- `GET /health/live`
+- `GET /health/ready`
+- `POST /internal/parse-artifact`
+- `POST /internal/evaluate-submission`
+- `POST /internal/build-retrieval-index`
+- `POST /internal/query-retrieval`
+
+---
+
+## 4. 当前已完成
+
+### 4.1 教学主链路
+
+已经打通：
+
+- 用户 / 课程 / 班级 / 实验 / 模板
+- 学生提交与附件上传
+- 教师触发初评
+- 教师复核与发布
+- 学生查看已发布结果
+- HTML / CSV / XLSX / PDF 报表导出
+
+### 4.2 Python 微服务基础能力
+
+已经具备：
+
+- Python 微服务骨架
+- Go 侧健康检查接入
+- 附件解析接线
+- 初评接线
+- 检索接口从 stub 变成真实实现
+- parser metadata 的 `sections / evidence` 进入检索上下文
+- 更细粒度的 evidence refs：
+  - `artifact:<id>#section:n`
+  - `artifact:<id>#evidence:n`
+
+### 4.3 当前仍缺的不是“能不能跑”
+
+真正还缺的是：
+
+- AI 过程的可审计性更强
+- 教师复核界面对 AI 证据的可见性更强
+- Python 微服务部署方式正式纳入交付文档和 systemd 资产
+- 本地模型 / embedding / 持久化检索后端路线明确化
+
+---
+
+## 5. 核心边界
+
+这是当前项目必须坚持的边界：
+
+### 5.1 Go 不负责的事
+
+Go 不应该继续硬做这些事：
+
+- 本地模型 SDK 适配
+- 文档解析生态整合
+- 检索 / RAG 主逻辑
+- 模型输出清洗与编排
+
+### 5.2 Python 不负责的事
+
+Python 不应该负责：
+
+- 用户权限
+- 最终发布决策
+- 教学业务主状态
+- 直接写主业务数据库
+
+### 5.3 统一原则
+
+- `Go 管业务`
+- `Python 管推理`
+- `数据库只以 Go 为真相源`
+
+---
+
+## 6. 当前推荐部署形态
+
+推荐把部署分成两种形态。
+
+### 6.1 开发 / 调试
+
+开发机上运行：
+
+- `Go 主服务`
+- `Python 推理微服务`
+- `SQLite 或 PostgreSQL`
+- `本地 / 远端模型服务`
+
+### 6.2 生产 / 试点
+
+银河麒麟目标机上建议运行：
+
+- `loong64-b1-go.service`
+- `python-ai-gateway.service`
+- `PostgreSQL 或默认 SQLite`
+- `本地模型服务或校内模型网关`
+
+也就是说，部署说明必须从“只部署一个 Go 服务”升级成：
+
+- `Go + Python 双服务部署`
+
+---
+
+## 7. 接下来要做的事
+
+下面是基于当前状态的真正路线，不再按早期“从零开始搭框架”的视角写。
+
+### 7.1 目标 A：文档与部署收口
+
+目标：
+
+- 把 `README.md`
+- `PLAN.md`
+- `docs/PYTHON_AI_MIDDLEWARE.md`
+- `docs/DEPLOY_KYLIN.md`
+- `deploy/kylin/systemd`
+
+全部改到“Go 主服务 + Python 推理微服务”的真实架构上
 
 交付：
 
-- `AGENT.md` 固定 MCP 远端提交流程。
-- `PLAN.md` 保存本开发计划。
-- `README.md`、`.gitignore`、`.env.example`、`go.mod`。
-- `cmd/server` 最小健康检查服务。
-- `api/openapi.yaml` 初始健康检查接口说明。
-- `docs/LOONGARCH_COMPATIBILITY.md`、`docs/SECURITY.md`。
+- README 明确当前架构、调试方式、Python 本地运行方式
+- 部署文档明确 Go / Python 双服务部署
+- systemd 模板纳入 Python 微服务
+- 环境变量模板纳入 `AI_GATEWAY_*` 与 `AI_GATEWAY_LLM_*`
 
 验收：
 
-- GitHub 远端仓库存在且初始文件已通过 MCP commit。
-- `go test ./...` 通过。
-- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server` 通过。
+- 新同学只看 README 和部署文档，就能理解系统分层
+- 目标机部署说明不再遗漏 Python 微服务
 
-### 阶段 1：后端基础设施
+### 7.2 目标 B：AI 过程审计可见
 
-目标：建立可配置、可迁移、可审计的 Go 后端基础。
+目标：
+
+- 不只保存一个“模型输出结果”
+- 还要把检索命中、引用摘要、命中数等信息回流成可审计数据
 
 交付：
 
-- 配置加载、结构化日志、错误响应、请求 ID、中间件。
-- PostgreSQL 连接池和迁移命令。
-- 本地 ObjectStore 抽象和存储目录初始化。
-- Job 状态模型和基础任务执行器。
-- OpenAPI 初始规范和 API 冒烟测试。
-- Auto Build 流水线生成 linux/amd64 与 linux/loong64 构建产物，Code Quality Review 流水线执行 linter 与 SourceryAI PR 审核，CD 流水线发布 Auto Build 产物到 GitHub Release。
+- `llm_call_logs` 输出中保留 retrieval context summary
+- Go 侧测试覆盖“Python 返回的 retrieval 审计数据被持久化”
 
 验收：
 
-- 健康检查区分 `live`、`ready`，ready 覆盖数据库和存储。
-- 空数据库可一键迁移到最新 schema。
-- PR 可自动执行 Go linter；配置 `SOURCERY_TOKEN` 后可执行 SourceryAI 差异代码审核。
-- Auto Build 成功上传 artifact，CD 只发布 Auto Build 产物且不重新编译。
-- Windows/Linux amd64 本地可运行，LoongArch 交叉编译通过。
+- 教师或管理员能在后端记录中追溯 AI 初评用了哪些主要证据
 
-### 阶段 1.5：部署骨架与本地数据库调试
+### 7.3 目标 C：教师复核可解释性
 
-目标：补齐银河麒麟 systemd 非容器部署骨架和开发环境 PostgreSQL 初始化脚本，降低后续阶段联调成本。
+目标：
+
+- 教师不是只看一个建议分
+- 而是直接看到 AI 引用了哪些 section / evidence
 
 交付：
 
-- `deploy/kylin/systemd` 提供 API 服务和迁移服务的 systemd 单元。
-- `deploy/kylin/env` 提供生产环境变量模板，不包含真实密钥。
-- `deploy/kylin/scripts` 提供安装单元和健康检查脚本。
-- `scripts/dev` 提供 Windows PowerShell 与 Linux shell 的本地 PostgreSQL 初始化和启动脚本。
-- `docs/DEPLOY_KYLIN.md` 与 `docs/LOCAL_POSTGRES.md` 记录部署与本地联调步骤。
+- 教师初评详情 API 返回更清楚的 evidence refs / retrieval summary
+- 前端复核页展示 AI 引用证据
 
 验收：
 
-- 本地脚本通过语法级检查，不提交真实密码或密钥。
-- systemd 单元包含专用用户、最小写目录、环境文件和 restart 策略。
-- 文档覆盖 release 产物、迁移、服务启动、健康检查和目标机验证记录。
+- 教师复核时能直接判断“AI 为什么这么打”
 
-### 阶段 2：用户、课程与评价模板
+### 7.4 目标 D：Python 检索与模型能力升级
 
-目标：完成教学管理和评分规则基础闭环。
+目标：
+
+- 给 Python 微服务明确一条长期可演进路线
+
+优先顺序：
+
+1. 当前有界内存检索继续稳定
+2. 增加持久化检索后端替换点
+3. 增加 embedding / 向量检索能力
+4. 增加本地模型 provider 适配
+5. 多 provider 路由与回退策略
+
+验收：
+
+- 不改变 Go 公共业务 API 的前提下，可以替换 Python 内部检索/模型实现
+
+### 7.5 目标 E：LoongArch 试点交付
+
+目标：
+
+- 让现在这套双服务体系在目标机上可部署、可验证、可留档
 
 交付：
 
-- 用户、角色、课程、班级、选课关系。
-- 实训任务 CRUD 和发布状态。
-- 评价模板、指标、权重、版本化。
-- 权重校验：使用整数基点 `weight_bps`，`strict_100` 模式总权重为 10000，`normalized` 模式按配置归一化。
-- 已发布模板版本和指标不可变，实训任务绑定具体模板版本。
-- 管理员和教师基础页面原型后续接入；本阶段优先完成后端 API 与 OpenAPI 契约。
+- systemd 双服务
+- 运行前检查
+- 目标机验证记录
+- UAT 跑单
 
 验收：
 
-- 教师可创建任务并绑定评价模板。
-- 模板修改不影响历史评价结果。
-- 后端单元测试覆盖权重校验、角色权限、模板所有者权限和版本绑定。
-- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
+- LoongArch + 银河麒麟可完成整条教学闭环
 
-### 阶段 3：成果上传与解析
+---
 
-目标：支持多格式成果上传，形成可追溯解析证据。
+## 8. 当前优先级
 
-交付：
+按优先级排序：
 
-- `submissions`、`artifacts`、`extracted_contents` 数据表和解析 Job 队列挂接。
-- 学生创建提交、上传文件、登记 Git 链接；教师查看提交列表和详情。
-- 上传接口、大小/类型/数量限制、SHA-256 计算和对象存储落盘。
-- Word/PDF/报告/截图/代码包/Git 链接元信息解析；深度解析后续进入 worker。
-- 解析任务状态流：queued、running、succeeded、failed。
-- 压缩包安全检查：Zip Slip、路径穿越、符号链接、超大解压。
-- 学生提交页面和教师提交详情页。
+1. `文档和部署说明改成双服务架构`
+2. `检索上下文审计回流`
+3. `教师复核可见 retrieval / evidence`
+4. `Python 本地模型与检索后端升级`
+5. `LoongArch 试点部署与 UAT`
 
-验收：
+---
 
-- 样例 PDF、文本报告、截图和代码包可上传并生成解析摘要或元数据。
-- 非法类型、超大文件和恶意压缩包被拒绝并记录原因。
-- 解析失败不会阻塞教师人工查看原始文件。
-- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
+## 9. LoongArch 约束
 
-### 阶段 4：规则核查与 LLM 初评
+每次新增能力都要看这几件事：
 
-目标：减少人工排查成本，并提供可复核的智能评价建议。
+- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server`
+- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate`
+- Python 依赖是否可在目标机安装
+- 是否强依赖 x86-only 组件
+- 是否增加难以在银河麒麟维护的运行时
 
-交付：
+当前架构下的原则是：
 
-- `evaluation_results`、`rule_check_findings`、`metric_scores`、`llm_call_logs` 迁移表，保存初评运行、规则发现、指标建议分和 LLM 调用摘要。
-- 教师同步触发 API：`POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`；教师查询最新初评 API：`GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest`。
-- 规则引擎：提交完整性、步骤覆盖、文档结构、关键证据、解析状态、明显逻辑风险和 Prompt Injection 风险。
-- LLM Gateway：标准库实现 OpenAI-compatible `/v1/chat/completions`，支持 base URL、model、API key、timeout。
-- 脱敏摘要：学生隐私、联系方式、密钥、仓库凭据最小化；`llm_call_logs` 只保存输入 hash 和结构化输出。
-- 结构化评分输出 schema：指标建议分、理由、证据引用、风险和置信度；本地校验 metric code、分数范围和证据引用。
-- Mock/httptest LLM 测试，保证离线 CI 可验证。
+- Go 继续尽量纯 Go
+- Python 允许承接 AI 生态复杂度
+- 但 Python 部署必须保持简单、可脚本化、可 systemd 管理
 
-验收：
+---
 
-- 同一提交可看到规则核查结果、AI 初评和证据来源。
-- LLM 输出不合规时进入待人工复核，不覆盖最终成绩。
-- Prompt injection 样例不能覆盖系统评分规则。
-- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
+## 10. 风险与处理
 
-### 阶段 5：教师复核与成绩发布
+### 10.1 Go / Python 边界漂移
 
-目标：让智能初评变成可解释、可调整、可发布的教学评价结果。
+风险：
 
-交付：
+- 业务状态慢慢跑进 Python
 
-- `teacher_reviews` 和 `teacher_metric_scores` 迁移表，保存教师复核草稿、逐指标最终分、来源、改分理由和发布状态。
-- 教师复核 API：保存草稿、查看草稿/已发布结果、显式发布最终评价。
-- 学生已发布评价 API：学生只能查看自己已发布的最终评价，未发布草稿不可见。
-- 教师主观评分、改分理由、评语和最终确认。
-- 发布后数据库触发器阻止复核主表和逐指标分被修改或删除。
-- 所有保存和发布行为写审计日志。
+处理：
 
-验收：
+- Python 只返回结构化结果
+- 主业务数据库只由 Go 写入
 
-- 教师可从 AI 初评分生成最终分，也可完全手动评分。
-- 发布后结果不可被后台任务覆盖。
-- 学生只能查看已发布最终评价。
-- 改分差异可被审计查询和报表统计。
-- `go test ./...`、`golangci-lint`、LoongArch server/migrate 交叉编译通过。
+### 10.2 Python 依赖过重
 
-### 阶段 5.5：PC Web MVP
+风险：
 
-目标：在后端评价闭环稳定后，交付学生、教师、管理员可操作的 PC Web 最小界面。
+- 目标机安装复杂
 
-交付：
+处理：
 
-- Vue 3 + Vite + TypeScript 前端骨架与 `npm run build` 验证。
-- 学生端：任务查看、提交创建、成果上传、提交详情、已发布评价查看。
-- 教师端：提交列表、解析/核查结果、AI 初评、复核草稿、发布成绩。
-- 管理端：本阶段保留后端管理 API；完整管理工作台延后到阶段 6/7 补齐。
-- 开发态使用 `X-Actor-ID` / `X-Actor-Roles` 模拟登录，生产认证后续接入。
+- 先走最小依赖方案
+- 每次引入新依赖都写入部署文档
 
-验收：
+### 10.3 检索与模型能力升级过早
 
-- 前端可通过现有 API 完成上传、初评、教师复核、发布、学生查看的主流程演示。
-- 桌面端可用，移动端基础响应式不破版。
-- 前端构建和后端 CI 不互相阻塞；LoongArch 部署文档明确前端静态资源托管方式。
-- 当前 MVP 页面已覆盖学生提交/上传、教师核查/复核/发布、学生查看已发布评价的演示链路。
+风险：
 
-### 阶段 6：统计报表与 Excel/PDF 导出
+- 系统复杂度先于业务收益增长
 
-目标：满足课程评价、班级统计和归档汇报要求。
+处理：
 
-当前 Stage 6 采用“纯 Go、LoongArch 安全优先”的报表闭环：已先后交付个人报告、实验统计、课程跨实验统计、HTML/CSV 导出记录与下载；PDF 暂按降级策略记录为待配置，避免在未验证的 LoongArch + 银河麒麟环境中引入浏览器、LibreOffice headless 或 native PDF 依赖。
+- 先把审计与教师可见性做好
+- 再做 embedding / 向量库
 
-已交付：
+### 10.4 文档与实现脱节
 
-- 学生个人评价报告 API：教师可查看草稿/发布上下文，学生只能查看自己已发布报告。
-- 实验统计报表 API：提交数、已提交数、已发布评价数、分数分布、指标均值、附件解析状态和常见问题统计。
-- 课程跨实验统计 API：按课程聚合实验数、提交数、已发布评价数、分数分布、指标均值和常见问题，并保留各实验子摘要。
-- `report_exports` 迁移表：记录报表类型、范围、格式、状态、筛选条件、对象存储 key、SHA-256、大小和操作者。
-- HTML 导出：作为规范归档源，写入对象存储 `reports/` 目录。
-- CSV 导出：带 UTF-8 BOM，作为 Excel/WPS/LibreOffice 兼容的首版表格导出。
-- PC Web 报表面板：支持个人报告预览、实验统计预览、课程统计预览、HTML/CSV 导出和 PDF 降级结果展示。
+风险：
 
-后续交付：
+- 团队理解混乱
 
-- 班级统计面板与跨班级对比，补齐班级维度完成率、异常提交和模型初评与教师改分差异。
-- Excel XLSX 异步导出，包含明细表、汇总表和图表数据；首选纯 Go 依赖，失败降级 CSV。
-- PDF 异步导出，需先选定 LoongArch 可验证的中文字体与渲染策略；图表不可用时降级为表格摘要。
-- 后台异步 worker 重试、导出任务列表和管理员审计查询。
+处理：
 
-验收：
+- 任何架构变化都同步改 `PLAN.md`、`README.md`、部署文档
 
-- 个人报告、实验统计和课程统计 API 可在教师/学生权限下正确返回或拒绝访问。
-- HTML/CSV 导出文件写入对象存储，并记录 SHA-256、大小、筛选条件和操作者。
-- CSV 可被 WPS/LibreOffice/Microsoft Excel 打开；PDF 在未配置 LoongArch 验证渲染器时必须给出明确降级记录。
-- 50 份以上样例提交可生成班级统计和课程统计。
-- PDF 在银河麒麟环境可生成、可打开、中文不乱码；图表不可用时自动降级为表格摘要。
+---
 
-### 阶段 7：LoongArch + 银河麒麟部署验证
+## 11. 当前结论
 
-目标：完成目标环境可运行、可维护、可升级验证。
+基于现在的情况，这个项目的正确表述应该是：
 
-当前切片已开始交付部署验证资产：主机环境采样脚本、部署前置检查脚本、整体验证脚本、Nginx 静态托管示例，以及数据库备份恢复与 LLM 配置示例文档。
+- `Go 是教学业务主系统`
+- `Python 是推理微服务`
+- `模型调用、本地模型适配、检索/RAG、文档解析增强优先放到 Python`
+- `Go 继续负责权限、状态、复核、发布、审计、报表`
 
-交付：
-
-- systemd 服务文件、环境变量模板、目录权限说明。
-- PostgreSQL 初始化、迁移、备份恢复步骤。
-- 前端构建产物托管方案。
-- 本地/云端 LLM 配置示例。
-- LoongArch 依赖验证记录和不可用能力降级说明。
-
-验收：
-
-- 在 LoongArch + 银河麒麟高级服务器版完成干净部署。
-- 服务开机自启动，`/health` ready 通过。
-- 可完成登录、任务创建、成果上传、解析、AI mock 评价、教师发布和报表导出。
-- 记录目标机 `uname -m`、系统版本、Go、PostgreSQL、字体和部署命令。
-
-### 阶段 7.5：单二进制运行与默认 SQLite
-
-目标：把系统推进到“一个二进制即可提供 API + Web UI，默认不依赖外部数据库”的交付形态。
-
-当前切片已完成阶段 A、阶段 B 和阶段 C 的首个完整可用版本：服务端支持通过 `go:embed` 内嵌 `web/dist`，发布流水线同时产出纯后端二进制和带内嵌前端的 `*-full` 二进制；SQLite/PostgreSQL 双驱动运行时、SQLite 迁移目录和 SQLite 教学仓储已接入；管理员可通过前端保存数据库运行配置并提示重启；数据库无用户时可直接通过 bootstrap 页面创建首个管理员；同时补充了 Docker/Podman 容器次级交付资产。完整无认证初始化向导和后续登录体系仍在后续切片。
-
-交付：
-
-- 后端内嵌 `web/dist`，单二进制直接托管前端页面。
-- 发布产物区分纯后端二进制和包含内嵌前端的完整二进制。
-- 配置新增数据库驱动选择：`sqlite` / `postgres`。
-- 默认 SQLite 运行模式，支持首次启动初始化。
-- PostgreSQL 保留为生产模式数据库。
-- 首次启动 / 管理员设置向导，用于选择数据库模式并写入本地运行时配置。
-
-验收：
-
-- 直接运行二进制即可打开 UI，不依赖额外 Web 服务器。
-- 默认 SQLite 模式下可完成最小演示链路。
-- PostgreSQL 模式保持现有主链路能力。
-- 数据库切换通过初始化向导或管理员设置完成，并明确要求重启生效。
-
-### 阶段 7.6：部署助手与上下文工程
-
-目标：为初始化、运行配置和数据库切换提供服务端持久会话、上下文快照和受控工具执行能力。
-
-当前切片已完成首个可用版本：已交付 bootstrap/deployment admin 两个作用域的部署助手，支持服务端持久会话、上下文快照、工具确认、首个管理员创建、运行配置读取、SQLite 路径测试、PostgreSQL 连接测试与 `runtime.json` 保存；无 LLM 配置时提供规则化 fallback。报表问答与评分解释助手仍在后续切片。
-
-交付：
-
-- `assistant_conversations`、`assistant_messages`、`assistant_context_snapshots`、`assistant_tool_calls`、`assistant_llm_calls`
-- bootstrap 部署助手 API
-- admin deployment assistant API
-- 前端部署助手面板
-- 敏感信息脱敏与受控工具确认
-
-验收：
-
-- 未初始化系统中可通过 bootstrap 助手创建首个管理员
-- 已初始化系统中 admin 可通过 deployment assistant 测试数据库连接并保存 `runtime.json`
-- 无 LLM 配置时助手仍可使用规则化 fallback 回复
-- 敏感 DSN 不写入助手持久化消息与工具请求快照
-
-### 阶段 7.7：认证与会话基线
-
-目标：用最小但真实的登录会话替换主链路对 `X-Actor-ID / X-Actor-Roles` 的依赖。
-
-当前切片已完成首个可用版本：系统已支持 username/password 登录、httpOnly session cookie、bootstrap 创建首个管理员后自动登录、`/api/v1/me` 会话识别，以及 `runtime-config` / `deployment assistant` / `teaching` API 的统一 actor 解析。开发态 header bypass 仍保留，但不再作为默认交互方式。
-
-交付：
-
-- `users.password_hash`
-- `auth_sessions`
-- `/api/v1/auth/login`
-- `/api/v1/auth/logout`
-- `POST /api/v1/bootstrap/admin` 创建后自动登录
-- `PUT /api/v1/admin/users/{userID}/password`
-- 前端登录面板与当前会话卡片
-- 前端管理员用户密码设置卡片
-
-验收：
-
-- 首次 bootstrap 后浏览器获得可用会话
-- `GET /api/v1/me` 通过 session cookie 返回当前身份
-- `POST /api/v1/auth/logout` 后会话失效
-- `POST /api/v1/auth/login` 可恢复会话
-- 管理员可为现有用户设置密码，用户可用新密码登录
-- `DEV_AUTH_BYPASS=true` 时仍可在本机通过 header 调试
-
-### 阶段 8：安全、性能、UAT 与发布
-
-目标：完成试点验收和可交付发布包。
-
-当前切片已开始交付认证安全收口：已补齐自助改密、密码变更后 session 吊销、过期 `auth_sessions` 的机会式清理，以及滑动 session 续期与 Origin/Referer 同源校验；后续继续推进更细的会话策略、样例压测和 UAT 文档。
-
-交付：
-
-- 上传安全、越权访问、Prompt Injection、敏感信息泄露测试。
-- 50-200 份样例提交批量试跑，记录解析和评价耗时。
-- 用户手册、部署手册、管理员手册和演示脚本。
-- 发布包、版本 tag、回滚说明和已知问题清单。
-
-验收：
-
-- 试点课程数据演练通过。
-- 高危问题关闭，中低风险有明确缓解措施。
-- 发布包可在新环境按文档复现部署。
-
-## 7. LoongArch 专项检查清单
-
-每次新增依赖或阶段验收都必须检查：
-
-- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server` 是否通过。
-- 是否引入 CGO；如引入，列出 LoongArch 原生依赖包和安装命令。
-- 是否包含 x86-only 二进制、浏览器驱动、PDF 工具、OCR 工具或 Node 运行时依赖。
-- PostgreSQL、字体、时区 `Asia/Shanghai`、UTF-8、文件权限和 systemd 用户是否正确。
-- PDF/Word/Excel/图片解析库是否纯 Go 或可在 LoongArch 编译。
-- 本地模型服务是否支持 LoongArch；不支持时必须保留云端或内网模型服务配置。
-- 目标环境验证记录必须追加到 `docs/LOONGARCH_COMPATIBILITY.md`。
-
-## 8. 测试策略
-
-- 单元测试：权重校验、规则核查、脱敏、LLM schema 校验、文件类型检测。
-- 集成测试：上传到解析、解析到评价、教师复核到发布、报表导出任务。
-- 安全测试：越权访问、恶意压缩包、Prompt Injection、敏感信息扫描。
-- 兼容测试：Windows amd64、Linux amd64、Linux loong64 交叉编译和目标机 smoke test。
-- 报表测试：Excel 打开兼容性、PDF 中文字体、图表降级、导出条件审计。
-- 性能测试：50、100、200 份提交批量解析和评价，记录 P50/P95 耗时。
-
-## 9. 默认假设
-
-- 首版只做 PC Web，不开发原生 App。
-- 首版不在 API 服务进程内执行学生代码；代码包以静态分析为主。
-- PostgreSQL 是唯一结构化数据库。
-- LLM Provider 采用 OpenAI-compatible HTTP，不绑定单一厂商 SDK。
-- 云端模型默认不接收原始学生文件，只接收脱敏摘要和必要证据。
-- PDF 导出必须交付，但实现允许按 LoongArch 可用能力降级图表表现形式。
-- 阶段 0 可直接提交到 `main`；后续功能开发默认使用 feature 分支。
-
-## 10. 主要风险与缓解
-
-- LoongArch 生态差异：坚持纯 Go 和无 CGO 默认，尽早做真机 smoke test。
-- 文档解析依赖风险：优先选纯 Go 或外部可替换工具，失败时保留人工查看入口。
-- PDF 中文和图表风险：HTML 作为规范展示源，PDF 模板单独验证字体和图表降级。
-- LLM 误判风险：AI 只做初评，教师复核和证据链作为最终质量控制。
-- 隐私合规风险：脱敏、最小化、审计和不保存密钥作为默认策略。
-- 需求扩张风险：所有新增能力必须落入阶段计划，并通过 MCP commit 更新 `PLAN.md`。
+后面的工作不应该再模糊这条边界，而应该持续把它做实、做清楚、做可部署。

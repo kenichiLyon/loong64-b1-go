@@ -1,0 +1,25 @@
+[Unit]
+Description=python-ai-gateway inference service
+Documentation=https://github.com/kenichiLyon/loong64-b1-go
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=loong64b1
+Group=loong64b1
+WorkingDirectory=/opt/loong64-b1-go/python-ai-gateway
+EnvironmentFile=/etc/loong64-b1-go/python-ai-gateway.env
+ExecStart=/opt/loong64-b1-go/python-ai-gateway/.venv/bin/python -m uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
+Restart=on-failure
+RestartSec=5s
+KillSignal=SIGTERM
+TimeoutStopSec=20s
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/lib/loong64-b1-go /var/log/loong64-b1-go /opt/loong64-b1-go/python-ai-gateway
+
+[Install]
+WantedBy=multi-user.target

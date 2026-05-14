@@ -1,36 +1,45 @@
-# 银河麒麟 + LoongArch 部署与验证
+# 银河麒麟 + LoongArch 部署说明
 
-本文件记录 systemd 非容器部署与 Stage 7 验证流程。目标环境为 LoongArch 架构 + 银河麒麟高级服务器版。
+当前推荐部署形态已经不是“只跑一个 Go 服务”。
+
+基于现在的项目结构，推荐的部署方式是：
+
+1. `loong64-b1-go.service`
+2. `python-ai-gateway.service`
+
+也就是：
+
+- `Go 主服务`
+- `Python 推理微服务`
+
+共同组成正式交付。
 
 ## 1. 发布产物
 
-CD 发布后，从 GitHub Release 下载：
+CD 发布后，优先下载：
 
 - `loong64-b1-go-full-linux-loong64.tar.gz`
+
+如果需要拆分部署，也可以使用：
+
 - `loong64-b1-go-backend-linux-loong64.tar.gz`
 - `loong64-b1-go-frontend.tar.gz`
 
-其中：
-
-- `full`：主交付，优先使用
-- `backend` / `frontend`：仅在明确需要前后端分离部署时使用
-
-建议先校验下载后的压缩包完整性：
+建议先校验：
 
 ```bash
 sha256sum loong64-b1-go-full-linux-loong64.tar.gz
-sha256sum loong64-b1-go-backend-linux-loong64.tar.gz
-sha256sum loong64-b1-go-frontend.tar.gz
 ```
 
-## 2. 安装目录
+## 2. 目标目录
 
-默认目录：
+推荐目录：
 
 ```text
 /opt/loong64-b1-go/bin
-/opt/loong64-b1-go/web
+/opt/loong64-b1-go/python-ai-gateway
 /etc/loong64-b1-go/loong64-b1-go.env
+/etc/loong64-b1-go/python-ai-gateway.env
 /etc/loong64-b1-go/runtime.json
 /var/lib/loong64-b1-go/storage
 /var/log/loong64-b1-go
@@ -46,158 +55,171 @@ sudo sh deploy/kylin/scripts/install-systemd.sh
 
 脚本会创建：
 
-- 系统用户：`loong64b1`
-- 服务单元：`loong64-b1-go.service`
-- 迁移单元：`loong64-b1-migrate.service`
-- 配置模板：`/etc/loong64-b1-go/loong64-b1-go.env`
+- 用户：`loong64b1`
+- `loong64-b1-go.service`
+- `loong64-b1-migrate.service`
+- `python-ai-gateway.service`
+- `/etc/loong64-b1-go/loong64-b1-go.env`
+- `/etc/loong64-b1-go/python-ai-gateway.env`
 
-## 4. 使用 Full Bundle
+## 4. 部署 Go 主服务
 
-优先解压：
+解压 full bundle：
 
 ```bash
 sudo install -d -m 0755 /opt/loong64-b1-go
 sudo tar -xzf loong64-b1-go-full-linux-loong64.tar.gz -C /opt/loong64-b1-go
 ```
 
-`full` bundle 内包含：
-
-- `bin/loong64-b1-go-linux-loong64-full`
-- `migrations/`
-- `deploy/kylin/scripts/`
-- `deploy/kylin/systemd/`
-- `config/loong64-b1-go.env.example`
-
-如果使用 `full` bundle，建议把完整二进制安装为 systemd 主程序：
+如果使用 full bundle，建议安装完整二进制为主程序：
 
 ```bash
 sudo install -o loong64b1 -g loong64b1 -m 0755 /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64-full /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64
 ```
 
-## 5. 使用 Split Backend Bundle
+## 5. 部署 Python 推理微服务
 
-如需分离部署，再解压：
+Python 微服务代码目录：
 
-```bash
-sudo install -d -m 0755 /opt/loong64-b1-go
-sudo tar -xzf loong64-b1-go-backend-linux-loong64.tar.gz -C /opt/loong64-b1-go
+```text
+/opt/loong64-b1-go/python-ai-gateway
 ```
 
-## 6. 部署前端静态资源
+推荐做法：
 
-如需前后端分离部署，再解压：
+1. 把仓库中的 `python-ai-gateway/` 目录同步到目标机
+2. 在目标机创建 venv
+3. 安装 Python 依赖
 
-```bash
-sudo install -d -m 0755 /opt/loong64-b1-go/frontend
-sudo tar -xzf loong64-b1-go-frontend.tar.gz -C /opt/loong64-b1-go/frontend
-```
-
-使用 `full` bundle 时，可以跳过本节，直接由服务二进制托管 PC Web 页面。使用分离部署时，仍建议在银河麒麟上使用 Nginx、Apache 或学校统一 Web 网关托管 `/opt/loong64-b1-go/frontend/web`，并把 `/api` 与 `/health` 反向代理到 `http://127.0.0.1:8080`。Nginx 示例见 `deploy/kylin/nginx/loong64-b1-go.conf.example`。
-
-## 7. 部署二进制
-
-若不直接使用 bundle 中的目录结构，也可手工安装：
+示例：
 
 ```bash
-sudo install -o loong64b1 -g loong64b1 -m 0755 loong64-b1-go-linux-loong64 /opt/loong64-b1-go/bin/
-sudo install -o loong64b1 -g loong64b1 -m 0755 loong64-b1-migrate-linux-loong64 /opt/loong64-b1-go/bin/
+cd /opt/loong64-b1-go/python-ai-gateway
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
 ```
 
-如果希望仅靠一个服务二进制同时提供 API 和前端页面，使用：
+如果目标机没有外网：
 
-```bash
-sudo install -o loong64b1 -g loong64b1 -m 0755 loong64-b1-go-linux-loong64-full /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64
+- 需要预先准备 Python wheel 缓存或内网源
+- 这是部署时必须留档的事项
+
+## 6. Go 环境变量
+
+编辑：
+
+```text
+/etc/loong64-b1-go/loong64-b1-go.env
 ```
 
-编辑 `/etc/loong64-b1-go/loong64-b1-go.env`，至少修改：
-
-- `DB_DRIVER`
-- `SESSION_SECURE_COOKIE`
-- `LLM_BASE_URL`
-- `LLM_MODEL`
-- `LLM_API_KEY`，如使用需要鉴权的模型网关
-
-SQLite 默认示例：
+至少确认：
 
 ```env
 DB_DRIVER=sqlite
 SQLITE_PATH=/var/lib/loong64-b1-go/data/loong64-b1-go.db
+
+AI_GATEWAY_BASE_URL=http://127.0.0.1:8081
+AI_GATEWAY_API_KEY=
+AI_GATEWAY_TIMEOUT=10s
 ```
 
-PostgreSQL 示例：
+如果使用 PostgreSQL：
 
 ```env
 DB_DRIVER=postgres
 DATABASE_URL=postgres://loong64_b1:CHANGE_ME@127.0.0.1:5432/loong64_b1?sslmode=disable
 ```
 
-认证 cookie 建议：
+## 7. Python 环境变量
 
-```env
-SESSION_COOKIE_NAME=loong64_b1_session
-SESSION_TTL=168h
-SESSION_SECURE_COOKIE=true
+编辑：
+
+```text
+/etc/loong64-b1-go/python-ai-gateway.env
 ```
 
-本地模型示例：
+至少确认：
 
 ```env
-LLM_BASE_URL=http://127.0.0.1:8000/v1
-LLM_MODEL=local-model
-LLM_API_KEY=
+AI_GATEWAY_API_KEY=
+AI_GATEWAY_LLM_BASE_URL=http://127.0.0.1:8000/v1
+AI_GATEWAY_LLM_API_KEY=
+AI_GATEWAY_LLM_MODEL=local-model
+AI_GATEWAY_LLM_TIMEOUT=30
 ```
 
-云端或校内网关示例：
+如果 Python 微服务要接本地模型服务：
 
 ```env
-LLM_BASE_URL=https://llm-gateway.example.edu/v1
-LLM_MODEL=gpt-compatible-model
-LLM_API_KEY=REDACTED
+AI_GATEWAY_LLM_BASE_URL=http://127.0.0.1:8000/v1
 ```
 
-## 8. 数据库迁移与启动
+如果要接校内或云端模型网关：
+
+```env
+AI_GATEWAY_LLM_BASE_URL=https://llm-gateway.example.edu/v1
+AI_GATEWAY_LLM_API_KEY=REDACTED
+AI_GATEWAY_LLM_MODEL=gpt-compatible-model
+```
+
+## 8. 启动顺序
+
+推荐顺序：
 
 ```bash
+sudo systemctl enable --now python-ai-gateway.service
 sudo systemctl start loong64-b1-migrate.service
 sudo systemctl enable --now loong64-b1-go.service
-sudo systemctl status loong64-b1-go.service
-sh deploy/kylin/scripts/preflight-check.sh
-BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/smoke-test.sh
-BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/verify-deployment.sh
 ```
 
-## 9. 环境采样与留档
+检查状态：
 
 ```bash
-BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/collect-env.sh /tmp/loong64-b1-go-stage7.txt
+sudo systemctl status python-ai-gateway.service
+sudo systemctl status loong64-b1-go.service
+curl http://127.0.0.1:8080/health/live
+curl http://127.0.0.1:8080/health/ready
 ```
 
-`collect-env.sh` 会记录：
+## 9. 前端托管
 
-- `uname -m` / `uname -a`
+如果使用 full bundle：
+
+- Go 主服务直接托管前端
+
+如果使用分离部署：
+
+- 使用 Nginx / 学校统一网关托管静态资源
+- `/api` 和 `/health` 反代到 Go 主服务
+
+Nginx 示例见：
+
+- `deploy/kylin/nginx/loong64-b1-go.conf.example`
+
+## 10. 当前部署结论
+
+现在的部署方式应当理解成：
+
+- `Go 是业务服务`
+- `Python 是推理服务`
+
+所以部署说明确实需要修改。  
+如果文档里只写 Go 服务，那已经落后于当前项目结构了。
+
+## 11. 验收与留档
+
+完整验收仍要记录：
+
+- `uname -m`
 - `/etc/os-release`
 - `go version`
-- `psql --version`
+- `python --version`
+- `pip freeze` 或等价依赖记录
+- `systemctl status python-ai-gateway.service`
 - `systemctl status loong64-b1-go.service`
-- `/health/live` 与 `/health/ready` 输出
+- `/health/live` 与 `/health/ready`
 
-## 10. 备份与恢复
+完整清单见：
 
-数据库备份：
-
-```bash
-pg_dump --format=custom --file /var/backups/loong64-b1-go/db.dump "$DATABASE_URL"
-tar -czf /var/backups/loong64-b1-go/storage.tar.gz /var/lib/loong64-b1-go/storage
-```
-
-数据库恢复：
-
-```bash
-createdb loong64_b1_restore
-pg_restore --clean --if-exists --no-owner --dbname loong64_b1_restore /var/backups/loong64-b1-go/db.dump
-tar -xzf /var/backups/loong64-b1-go/storage.tar.gz -C /
-```
-
-## 11. LoongArch 记录
-
-完整验收清单见 `docs/STAGE7_DEPLOYMENT_VERIFICATION.md`。
+- `docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
