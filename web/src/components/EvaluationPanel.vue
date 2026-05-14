@@ -10,6 +10,14 @@ const props = defineProps<{
 
 const evidenceRefs = computed(() => collectEvaluationEvidenceRefs(props.evaluation));
 const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, evidenceRefs.value));
+
+function resolveScoreSnippets(refs: string[] | undefined) {
+  return resolveEvidenceSnippets(props.detail, refs ?? []);
+}
+
+function resolveFindingSnippets(ref: string | undefined) {
+  return ref ? resolveEvidenceSnippets(props.detail, [ref]) : [];
+}
 </script>
 
 <template>
@@ -27,6 +35,13 @@ const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, ev
         <div v-if="score.evidence_refs?.length" class="chip-list">
           <span v-for="ref in score.evidence_refs.filter((item) => item.trim() !== '')" :key="ref" class="chip">{{ ref }}</span>
         </div>
+        <div v-if="resolveScoreSnippets(score.evidence_refs).length" class="snippet-list inline-snippets">
+          <article v-for="snippet in resolveScoreSnippets(score.evidence_refs)" :key="snippet.ref" class="snippet-card">
+            <strong>{{ snippet.title }}</strong>
+            <small>{{ snippet.ref }}</small>
+            <p>{{ snippet.text }}</p>
+          </article>
+        </div>
       </article>
     </div>
 
@@ -35,6 +50,13 @@ const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, ev
         <strong>{{ finding.severity }} / {{ finding.category }}</strong>
         <p>{{ finding.message }}</p>
         <small v-if="finding.evidence_ref">{{ finding.evidence_ref }}</small>
+        <div v-if="resolveFindingSnippets(finding.evidence_ref).length" class="snippet-list inline-snippets">
+          <article v-for="snippet in resolveFindingSnippets(finding.evidence_ref)" :key="snippet.ref" class="snippet-card">
+            <strong>{{ snippet.title }}</strong>
+            <small>{{ snippet.ref }}</small>
+            <p>{{ snippet.text }}</p>
+          </article>
+        </div>
       </article>
     </div>
 

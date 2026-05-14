@@ -345,6 +345,10 @@ label {
   color: var(--muted);
 }
 
+.inline-snippets {
+  margin-top: 10px;
+}
+
 .finding.high,
 .finding.critical {
   border-color: rgba(216, 74, 39, 0.5);
