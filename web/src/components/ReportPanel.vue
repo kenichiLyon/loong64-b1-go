@@ -107,7 +107,7 @@ const reportEvidenceSnippets = computed(() => {
       <div class="chip-list">
         <span v-for="snippet in reportEvidenceSnippets" :key="snippet.ref" class="chip">{{ snippet.ref }}</span>
       </div>
-      <div v-if="reportEvidenceSnippets.length" class="snippet-list">
+      <div class="snippet-list">
         <article v-for="snippet in reportEvidenceSnippets" :key="snippet.ref" class="snippet-card">
           <strong>{{ snippet.title }}</strong>
           <small>{{ snippet.ref }}</small>
