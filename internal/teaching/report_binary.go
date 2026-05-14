@@ -49,11 +49,18 @@ func renderSubmissionReportXLSX(report SubmissionReport) ([]byte, error) {
 	if report.Evaluation != nil {
 		findingSheet := "Findings"
 		_, _ = file.NewSheet(findingSheet)
-		findingRows := [][]any{{"严重度", "类别", "消息"}}
+		findingRows := [][]any{{"严重度", "类别", "消息", "证据引用"}}
 		for _, finding := range report.Evaluation.Findings {
-			findingRows = append(findingRows, []any{finding.Severity, finding.Category, finding.Message})
+			findingRows = append(findingRows, []any{finding.Severity, finding.Category, finding.Message, finding.EvidenceRef})
 		}
 		writeRows(file, findingSheet, findingRows)
+		suggestionSheet := "AISuggestions"
+		_, _ = file.NewSheet(suggestionSheet)
+		suggestionRows := [][]any{{"指标", "建议分", "满分", "理由", "证据引用"}}
+		for _, score := range report.Evaluation.Scores {
+			suggestionRows = append(suggestionRows, []any{score.MetricCode, score.SuggestedScore, score.MaxScore, score.Rationale, strings.Join(parseEvidenceRefs(score.EvidenceRefs), " | ")})
+		}
+		writeRows(file, suggestionSheet, suggestionRows)
 	}
 	return workbookBytes(file)
 }
@@ -172,7 +179,10 @@ func renderSubmissionReportPDF(report SubmissionReport) ([]byte, error) {
 	if report.Evaluation != nil {
 		writePDFSection(doc, "智能核查摘要", report.Evaluation.Result.LLMSummary)
 		for _, finding := range report.Evaluation.Findings {
-			writePDFSection(doc, fmt.Sprintf("发现 %s/%s", finding.Severity, finding.Category), finding.Message)
+			writePDFSection(doc, fmt.Sprintf("发现 %s/%s", finding.Severity, finding.Category), strings.TrimSpace(finding.Message+"\n证据引用："+finding.EvidenceRef))
+		}
+		for _, score := range report.Evaluation.Scores {
+			writePDFSection(doc, "AI 建议 "+score.MetricCode, fmt.Sprintf("建议分 %d/%d。%s\n证据引用：%s", score.SuggestedScore, score.MaxScore, score.Rationale, strings.Join(parseEvidenceRefs(score.EvidenceRefs), "、")))
 		}
 	}
 	return pdfBytes(doc)

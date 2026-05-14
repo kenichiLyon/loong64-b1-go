@@ -572,7 +572,7 @@ func renderSubmissionReportHTML(report SubmissionReport) string {
 	if report.Evaluation != nil {
 		b.WriteString("<section><h2>智能核查摘要</h2><p>")
 		b.WriteString(html.EscapeString(report.Evaluation.Result.LLMSummary))
-		b.WriteString("</p><table><thead><tr><th>等级</th><th>类别</th><th>问题</th></tr></thead><tbody>")
+		b.WriteString("</p><table><thead><tr><th>等级</th><th>类别</th><th>问题</th><th>证据引用</th></tr></thead><tbody>")
 		for _, finding := range report.Evaluation.Findings {
 			b.WriteString("<tr><td>")
 			b.WriteString(html.EscapeString(string(finding.Severity)))
@@ -580,6 +580,20 @@ func renderSubmissionReportHTML(report SubmissionReport) string {
 			b.WriteString(html.EscapeString(finding.Category))
 			b.WriteString("</td><td>")
 			b.WriteString(html.EscapeString(finding.Message))
+			b.WriteString("</td><td>")
+			b.WriteString(html.EscapeString(strings.TrimSpace(finding.EvidenceRef)))
+			b.WriteString("</td></tr>")
+		}
+		b.WriteString("</tbody></table><h3>AI 指标建议</h3><table><thead><tr><th>指标</th><th>建议分</th><th>理由</th><th>证据引用</th></tr></thead><tbody>")
+		for _, score := range report.Evaluation.Scores {
+			b.WriteString("<tr><td>")
+			b.WriteString(html.EscapeString(score.MetricCode))
+			b.WriteString("</td><td>")
+			fmt.Fprintf(&b, "%d / %d", score.SuggestedScore, score.MaxScore)
+			b.WriteString("</td><td>")
+			b.WriteString(html.EscapeString(score.Rationale))
+			b.WriteString("</td><td>")
+			b.WriteString(html.EscapeString(strings.Join(parseEvidenceRefs(score.EvidenceRefs), ", ")))
 			b.WriteString("</td></tr>")
 		}
 		b.WriteString("</tbody></table></section>")
@@ -611,9 +625,14 @@ func renderSubmissionReportCSV(report SubmissionReport) []byte {
 	}
 	if report.Evaluation != nil {
 		writeCSV(writer, []string{})
-		writeCSV(writer, []string{"智能核查发现", "严重度", "类别", "消息"})
+		writeCSV(writer, []string{"智能核查发现", "严重度", "类别", "消息", "证据引用"})
 		for _, finding := range report.Evaluation.Findings {
-			writeCSV(writer, []string{"finding", string(finding.Severity), finding.Category, finding.Message})
+			writeCSV(writer, []string{"finding", string(finding.Severity), finding.Category, finding.Message, finding.EvidenceRef})
+		}
+		writeCSV(writer, []string{})
+		writeCSV(writer, []string{"智能指标建议", "指标", "建议分", "满分", "理由", "证据引用"})
+		for _, score := range report.Evaluation.Scores {
+			writeCSV(writer, []string{"metric_score", score.MetricCode, fmt.Sprint(score.SuggestedScore), fmt.Sprint(score.MaxScore), score.Rationale, strings.Join(parseEvidenceRefs(score.EvidenceRefs), " | ")})
 		}
 	}
 	writer.Flush()
@@ -948,4 +967,21 @@ func reportExportFileName(export ReportExport) string {
 		ext = "html"
 	}
 	return fmt.Sprintf("%s-%s.%s", export.ReportType, export.ID, ext)
+}
+
+func parseEvidenceRefs(raw json.RawMessage) []string {
+	var refs []string
+	if len(raw) == 0 {
+		return refs
+	}
+	if err := json.Unmarshal(raw, &refs); err != nil {
+		return nil
+	}
+	filtered := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) != "" {
+			filtered = append(filtered, ref)
+		}
+	}
+	return filtered
 }

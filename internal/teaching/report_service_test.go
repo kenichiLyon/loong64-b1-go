@@ -72,7 +72,7 @@ func TestCreateSubmissionReportExportHTMLWritesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export file: %v", err)
 	}
-	if !strings.Contains(string(content), "学生个人评价报告") || !strings.Contains(string(content), "quality") {
+	if !strings.Contains(string(content), "学生个人评价报告") || !strings.Contains(string(content), "quality") || !strings.Contains(string(content), "artifact:artifact-1#section:1") {
 		t.Fatalf("html report missing expected content: %s", string(content))
 	}
 }
@@ -99,7 +99,7 @@ func TestCreateSubmissionReportExportCSVWithBOM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read export file: %v", err)
 	}
-	if !strings.HasPrefix(string(content), "\ufeff") || !strings.Contains(string(content), "个人评价报告") {
+	if !strings.HasPrefix(string(content), "\ufeff") || !strings.Contains(string(content), "个人评价报告") || !strings.Contains(string(content), "artifact:artifact-1#section:1") {
 		t.Fatalf("csv report missing BOM or content: %q", string(content[:min(len(content), 64)]))
 	}
 }
@@ -265,8 +265,8 @@ func validPublishedReportReview() TeacherReviewDetail {
 func validReportEvaluationDetail() EvaluationResultDetail {
 	return EvaluationResultDetail{
 		Result:   EvaluationResult{ID: "evaluation-1", SubmissionID: "submission-1", Status: EvaluationStatusCompleted, LLMSummary: "AI 建议整体良好。"},
-		Findings: []RuleCheckFinding{{ID: "finding-1", Category: "document", Severity: FindingLow, Message: "报告总结可更详细。"}},
-		Scores:   []MetricScore{{ID: "metric-score-1", MetricID: "metric-1", MetricCode: "quality", Source: MetricScoreSourceLLM, SuggestedScore: 18, MaxScore: 20, ConfidenceBPS: 8000, Rationale: "证据充足"}},
+		Findings: []RuleCheckFinding{{ID: "finding-1", Category: "document", Severity: FindingLow, Message: "报告总结可更详细。", EvidenceRef: "artifact:artifact-1#section:2"}},
+		Scores:   []MetricScore{{ID: "metric-score-1", MetricID: "metric-1", MetricCode: "quality", Source: MetricScoreSourceLLM, SuggestedScore: 18, MaxScore: 20, ConfidenceBPS: 8000, Rationale: "证据充足", EvidenceRefs: mustJSON([]string{"artifact:artifact-1#section:1"})}},
 	}
 }
 
