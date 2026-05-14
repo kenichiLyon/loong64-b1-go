@@ -22,6 +22,26 @@ const emit = defineEmits<{
 function percent(value: number) {
   return `${(value / 100).toFixed(1)}%`;
 }
+
+function uniqueEvidenceRefs(report: SubmissionReport | null) {
+  if (!report?.evaluation) {
+    return [];
+  }
+  const refs = new Set<string>();
+  for (const score of report.evaluation.scores) {
+    for (const ref of score.evidence_refs ?? []) {
+      if (ref.trim() !== '') {
+        refs.add(ref);
+      }
+    }
+  }
+  for (const finding of report.evaluation.findings) {
+    if (finding.evidence_ref && finding.evidence_ref.trim() !== '') {
+      refs.add(finding.evidence_ref);
+    }
+  }
+  return Array.from(refs);
+}
 </script>
 
 <template>
@@ -66,6 +86,13 @@ function percent(value: number) {
       <div>
         <span>证据数</span>
         <strong>{{ report.artifacts.length }}</strong>
+      </div>
+    </div>
+
+    <div v-if="report && uniqueEvidenceRefs(report).length" class="summary-block">
+      <h3>AI 引用证据</h3>
+      <div class="chip-list">
+        <span v-for="ref in uniqueEvidenceRefs(report)" :key="ref" class="chip">{{ ref }}</span>
       </div>
     </div>
 
