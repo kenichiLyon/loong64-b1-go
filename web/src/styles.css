@@ -345,6 +345,11 @@ label {
   color: var(--muted);
 }
 
+.snippet-card.highlight {
+  border-color: rgba(41, 85, 107, 0.45);
+  background: rgba(41, 85, 107, 0.08);
+}
+
 .inline-snippets {
   margin-top: 10px;
 }

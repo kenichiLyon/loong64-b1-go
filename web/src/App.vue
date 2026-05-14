@@ -797,7 +797,7 @@ onMounted(() => {
     </section>
 
     <section v-if="bootstrapStatus?.initialized !== false && loggedIn" class="dashboard-grid">
-      <SubmissionDetailPanel :detail="detail" :review="review" />
+      <SubmissionDetailPanel :detail="detail" :evaluation="evaluation" :review="review" />
       <EvaluationPanel :detail="detail" :evaluation="evaluation" />
       <ReviewPanel :busy="busy" :detail="detail" :evaluation="evaluation" :review="review" @save="saveReview" @publish="publishReview" />
     </section>
