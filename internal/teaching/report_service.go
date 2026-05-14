@@ -54,6 +54,7 @@ func (s *Service) GetCourseReportSummary(ctx context.Context, actor Actor, cours
 	}
 	metricStats := map[string]metricAggregate{}
 	findingStats := map[string]FindingCount{}
+	evidenceRefStats := map[string]int{}
 	totalScore := 0
 	for _, experiment := range experiments {
 		experimentSummary, err := s.buildExperimentReportSummary(ctx, experiment.ID, 200)
@@ -93,12 +94,14 @@ func (s *Service) GetCourseReportSummary(ctx context.Context, actor Actor, cours
 			entry.Count += finding.Count
 			findingStats[key] = entry
 		}
+		mergeCountMap(evidenceRefStats, evidenceRefCountMap(experimentSummary.EvidenceRefCounts))
 	}
 	if summary.PublishedReviewCount > 0 {
 		summary.AverageScoreBPS = roundedDivide(totalScore, summary.PublishedReviewCount)
 	}
 	summary.MetricAverages = buildMetricAverages(metricStats)
 	summary.FindingCounts = buildFindingCounts(findingStats)
+	summary.EvidenceRefCounts = buildEvidenceRefCounts(evidenceRefStats)
 	return summary, nil
 }
 
@@ -117,6 +120,7 @@ func (s *Service) buildExperimentReportSummary(ctx context.Context, experimentID
 	}
 	metricStats := map[string]metricAggregate{}
 	findingStats := map[string]FindingCount{}
+	evidenceRefStats := map[string]int{}
 	totalScore := 0
 	for _, submission := range submissions {
 		summary.SubmissionStatusCount[submission.Status]++
@@ -139,6 +143,14 @@ func (s *Service) buildExperimentReportSummary(ctx context.Context, experimentID
 				entry.Severity = finding.Severity
 				entry.Count++
 				findingStats[key] = entry
+				if ref := strings.TrimSpace(finding.EvidenceRef); ref != "" {
+					evidenceRefStats[ref]++
+				}
+			}
+			for _, score := range evaluation.Scores {
+				for _, ref := range parseEvidenceRefs(score.EvidenceRefs) {
+					evidenceRefStats[ref]++
+				}
 			}
 		} else if ErrorKindOf(err) != KindNotFound {
 			return ExperimentReportSummary{}, err
@@ -175,6 +187,7 @@ func (s *Service) buildExperimentReportSummary(ctx context.Context, experimentID
 	}
 	summary.MetricAverages = buildMetricAverages(metricStats)
 	summary.FindingCounts = buildFindingCounts(findingStats)
+	summary.EvidenceRefCounts = buildEvidenceRefCounts(evidenceRefStats)
 	return summary, nil
 }
 
@@ -682,7 +695,19 @@ func renderExperimentSummaryHTML(summary ExperimentReportSummary) string {
 		fmt.Fprint(&b, finding.Count)
 		b.WriteString("</td></tr>")
 	}
-	b.WriteString("</tbody></table></section></main></body></html>")
+	b.WriteString("</tbody></table></section>")
+	if len(summary.EvidenceRefCounts) > 0 {
+		b.WriteString("<section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
+		for _, item := range summary.EvidenceRefCounts {
+			b.WriteString("<tr><td>")
+			b.WriteString(html.EscapeString(item.Reference))
+			b.WriteString("</td><td>")
+			fmt.Fprint(&b, item.Count)
+			b.WriteString("</td></tr>")
+		}
+		b.WriteString("</tbody></table></section>")
+	}
+	b.WriteString("</main></body></html>")
 	return b.String()
 }
 
@@ -712,6 +737,13 @@ func renderExperimentSummaryCSV(summary ExperimentReportSummary) []byte {
 	writeCSV(writer, []string{"问题严重度", "类别", "数量"})
 	for _, finding := range summary.FindingCounts {
 		writeCSV(writer, []string{string(finding.Severity), finding.Category, fmt.Sprint(finding.Count)})
+	}
+	if len(summary.EvidenceRefCounts) > 0 {
+		writeCSV(writer, []string{})
+		writeCSV(writer, []string{"AI 证据引用", "次数"})
+		for _, item := range summary.EvidenceRefCounts {
+			writeCSV(writer, []string{item.Reference, fmt.Sprint(item.Count)})
+		}
 	}
 	writer.Flush()
 	return b.Bytes()
@@ -779,7 +811,19 @@ func renderCourseSummaryHTML(summary CourseReportSummary) string {
 		fmt.Fprint(&b, finding.Count)
 		b.WriteString("</td></tr>")
 	}
-	b.WriteString("</tbody></table></section></main></body></html>")
+	b.WriteString("</tbody></table></section>")
+	if len(summary.EvidenceRefCounts) > 0 {
+		b.WriteString("<section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
+		for _, item := range summary.EvidenceRefCounts {
+			b.WriteString("<tr><td>")
+			b.WriteString(html.EscapeString(item.Reference))
+			b.WriteString("</td><td>")
+			fmt.Fprint(&b, item.Count)
+			b.WriteString("</td></tr>")
+		}
+		b.WriteString("</tbody></table></section>")
+	}
+	b.WriteString("</main></body></html>")
 	return b.String()
 }
 
@@ -815,6 +859,13 @@ func renderCourseSummaryCSV(summary CourseReportSummary) []byte {
 	writeCSV(writer, []string{"问题严重度", "类别", "数量"})
 	for _, finding := range summary.FindingCounts {
 		writeCSV(writer, []string{string(finding.Severity), finding.Category, fmt.Sprint(finding.Count)})
+	}
+	if len(summary.EvidenceRefCounts) > 0 {
+		writeCSV(writer, []string{})
+		writeCSV(writer, []string{"AI 证据引用", "次数"})
+		for _, item := range summary.EvidenceRefCounts {
+			writeCSV(writer, []string{item.Reference, fmt.Sprint(item.Count)})
+		}
 	}
 	writer.Flush()
 	return b.Bytes()
@@ -881,6 +932,34 @@ func buildFindingCounts(stats map[string]FindingCount) []FindingCount {
 		return severityRank(findings[i].Severity) > severityRank(findings[j].Severity)
 	})
 	return findings
+}
+
+func buildEvidenceRefCounts(stats map[string]int) []EvidenceRefCount {
+	refs := make([]EvidenceRefCount, 0, len(stats))
+	for ref, count := range stats {
+		if strings.TrimSpace(ref) == "" || count <= 0 {
+			continue
+		}
+		refs = append(refs, EvidenceRefCount{Reference: ref, Count: count})
+	}
+	sort.Slice(refs, func(i, j int) bool {
+		if refs[i].Count == refs[j].Count {
+			return refs[i].Reference < refs[j].Reference
+		}
+		return refs[i].Count > refs[j].Count
+	})
+	return refs
+}
+
+func evidenceRefCountMap(items []EvidenceRefCount) map[string]int {
+	refs := make(map[string]int, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Reference) == "" || item.Count <= 0 {
+			continue
+		}
+		refs[item.Reference] += item.Count
+	}
+	return refs
 }
 
 func mergeCountMap(dst, src map[string]int) {
