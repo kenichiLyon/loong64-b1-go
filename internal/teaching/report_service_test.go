@@ -250,6 +250,34 @@ func TestCreateCourseSummaryExportCSVWritesFile(t *testing.T) {
 	}
 }
 
+func TestRenderExperimentSummaryHTMLWithoutEvidenceRefsDoesNotDoubleCloseTable(t *testing.T) {
+	summary := ExperimentReportSummary{
+		ExperimentID:      "experiment-1",
+		ScoreBuckets:      emptyScoreBuckets(),
+		MetricAverages:    []MetricAverage{{MetricCode: "quality", AverageScore: 18, AveragePercentBPS: 9000, MaxScore: 20, Count: 1}},
+		FindingCounts:     []FindingCount{{Category: "steps", Severity: FindingLow, Count: 1}},
+		EvidenceRefCounts: nil,
+	}
+	html := renderExperimentSummaryHTML(summary)
+	if strings.Count(html, "</table>") != 3 {
+		t.Fatalf("unexpected html table count: %s", html)
+	}
+}
+
+func TestRenderCourseSummaryHTMLWithoutEvidenceRefsDoesNotDoubleCloseTable(t *testing.T) {
+	summary := CourseReportSummary{
+		CourseID:          "course-1",
+		ScoreBuckets:      emptyScoreBuckets(),
+		MetricAverages:    []MetricAverage{{MetricCode: "quality", AverageScore: 18, AveragePercentBPS: 9000, MaxScore: 20, Count: 1}},
+		FindingCounts:     []FindingCount{{Category: "steps", Severity: FindingLow, Count: 1}},
+		EvidenceRefCounts: nil,
+	}
+	html := renderCourseSummaryHTML(summary)
+	if strings.Count(html, "</table>") != 4 {
+		t.Fatalf("unexpected course html table count: %s", html)
+	}
+}
+
 func validReportEvaluationContext() EvaluationContext {
 	return EvaluationContext{
 		Submission: Submission{ID: "submission-1", ExperimentID: "experiment-1", StudentID: "student-1", Status: "submitted"},

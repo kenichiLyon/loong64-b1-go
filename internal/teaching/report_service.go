@@ -695,9 +695,9 @@ func renderExperimentSummaryHTML(summary ExperimentReportSummary) string {
 		fmt.Fprint(&b, finding.Count)
 		b.WriteString("</td></tr>")
 	}
-	b.WriteString("</tbody></table>")
+	b.WriteString("</tbody></table></section>")
 	if len(summary.EvidenceRefCounts) > 0 {
-		b.WriteString("</section><section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
+		b.WriteString("<section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
 		for _, item := range summary.EvidenceRefCounts {
 			b.WriteString("<tr><td>")
 			b.WriteString(html.EscapeString(item.Reference))
@@ -705,8 +705,9 @@ func renderExperimentSummaryHTML(summary ExperimentReportSummary) string {
 			fmt.Fprint(&b, item.Count)
 			b.WriteString("</td></tr>")
 		}
+		b.WriteString("</tbody></table></section>")
 	}
-	b.WriteString("</tbody></table></section></main></body></html>")
+	b.WriteString("</main></body></html>")
 	return b.String()
 }
 
@@ -810,9 +811,9 @@ func renderCourseSummaryHTML(summary CourseReportSummary) string {
 		fmt.Fprint(&b, finding.Count)
 		b.WriteString("</td></tr>")
 	}
-	b.WriteString("</tbody></table>")
+	b.WriteString("</tbody></table></section>")
 	if len(summary.EvidenceRefCounts) > 0 {
-		b.WriteString("</section><section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
+		b.WriteString("<section><h2>AI 证据引用概览</h2><table><thead><tr><th>证据引用</th><th>次数</th></tr></thead><tbody>")
 		for _, item := range summary.EvidenceRefCounts {
 			b.WriteString("<tr><td>")
 			b.WriteString(html.EscapeString(item.Reference))
@@ -820,8 +821,9 @@ func renderCourseSummaryHTML(summary CourseReportSummary) string {
 			fmt.Fprint(&b, item.Count)
 			b.WriteString("</td></tr>")
 		}
+		b.WriteString("</tbody></table></section>")
 	}
-	b.WriteString("</tbody></table></section></main></body></html>")
+	b.WriteString("</main></body></html>")
 	return b.String()
 }
 
