@@ -113,6 +113,7 @@ type LLMCallLog struct {
 
 type EvaluationResultDetail struct {
 	Result   EvaluationResult   `json:"result"`
+	Log      *LLMCallLog        `json:"log,omitempty"`
 	Findings []RuleCheckFinding `json:"findings"`
 	Scores   []MetricScore      `json:"scores"`
 }

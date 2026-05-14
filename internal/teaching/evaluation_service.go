@@ -83,7 +83,16 @@ func (s *Service) GetLatestEvaluation(ctx context.Context, actor Actor, submissi
 	if err := s.requireTeacherSubmissionAccess(ctx, actor, submissionID); err != nil {
 		return EvaluationResultDetail{}, err
 	}
-	return s.repo.GetLatestEvaluation(ctx, submissionID)
+	detail, err := s.repo.GetLatestEvaluation(ctx, submissionID)
+	if err != nil {
+		return EvaluationResultDetail{}, err
+	}
+	log, err := s.repo.GetLatestLLMCallLog(ctx, detail.Result.ID)
+	if err != nil && ErrorKindOf(err) != KindNotFound {
+		return EvaluationResultDetail{}, err
+	}
+	detail.Log = log
+	return detail, nil
 }
 
 func (s *Service) evaluateWithConfiguredAI(ctx context.Context, evalCtx EvaluationContext, evaluationID string, evidenceSnapshot json.RawMessage, mode string) ([]MetricScore, string, *LLMCallLog, error) {

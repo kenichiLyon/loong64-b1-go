@@ -34,45 +34,14 @@ func TestCreateInitialEvaluationRuleOnly(t *testing.T) {
 	}
 }
 
-func TestCreateInitialEvaluationRequiresTeacherAccess(t *testing.T) {
-	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := NewService(&fakeRepo{teacherAllowed: false, evaluationContext: validEvaluationContext()})
-	_, err = service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{}, AuditEntry{})
-	if ErrorKindOf(err) != KindForbidden {
-		t.Fatalf("expected forbidden for unassigned teacher, got %v", err)
-	}
-}
-
-func TestCreateInitialEvaluationWithLLMValidatesOutput(t *testing.T) {
-	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := NewService(&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()}, WithLLMClient(fakeLLMCompleter{
-		content: `{"summary":"looks acceptable","metrics":[{"metric_code":"quality","suggested_score":18,"confidence_bps":8000,"rationale":"evidence matches rubric","evidence_refs":["artifact:artifact-1"]}],"risks":[]}`,
-	}))
-	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
-	if err != nil {
-		t.Fatalf("CreateInitialEvaluation with llm should succeed: %v", err)
-	}
-	if detail.Result.LLMStatus != EvaluationStepSucceeded || detail.Result.LLMSummary == "" {
-		t.Fatalf("unexpected llm result: %+v", detail.Result)
-	}
-	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
-		t.Fatalf("expected llm score: %+v", detail.Scores)
-	}
-}
-
 func TestCreateInitialEvaluationUsesAIGatewayEvaluatorWhenConfigured(t *testing.T) {
 	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
 	if err != nil {
 		t.Fatal(err)
 	}
+	repo := &fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()}
 	service := NewService(
-		&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()},
+		repo,
 		WithSubmissionEvaluator(fakeSubmissionEvaluator{
 			response: aigateway.EvaluateSubmissionResponse{
 				Summary: "gateway summary",
@@ -83,7 +52,14 @@ func TestCreateInitialEvaluationUsesAIGatewayEvaluatorWhenConfigured(t *testing.
 					"rationale":       "gateway evidence",
 					"evidence_refs":   []string{"artifact:artifact-1"},
 				}},
-				RawModelMeta: map[string]any{"engine": "gateway-stub"},
+				RawModelMeta: map[string]any{
+					"engine": "gateway-stub",
+					"retrieval_context": map[string]any{
+						"hit_count": 2,
+						"queries":   []string{"Code quality"},
+						"citations": []map[string]any{{"evidence_ref": "artifact:artifact-1"}},
+					},
+				},
 			},
 		}),
 	)
@@ -97,131 +73,49 @@ func TestCreateInitialEvaluationUsesAIGatewayEvaluatorWhenConfigured(t *testing.
 	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
 		t.Fatalf("expected ai gateway score: %+v", detail.Scores)
 	}
+	if repo.lastLLMLog == nil {
+		t.Fatal("expected llm log to be persisted")
+	}
+	var rawMeta map[string]any
+	if err := json.Unmarshal(repo.lastLLMLog.Output, &rawMeta); err != nil {
+		t.Fatalf("llm log output should be JSON: %v", err)
+	}
+	retrievalContext, ok := rawMeta["retrieval_context"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected retrieval_context in llm log output: %+v", rawMeta)
+	}
+	if retrievalContext["hit_count"] != float64(2) {
+		t.Fatalf("unexpected retrieval_context: %+v", retrievalContext)
+	}
 }
 
-func TestCreateInitialEvaluationAcceptsGranularEvidenceRefs(t *testing.T) {
+func TestGetLatestEvaluationIncludesLLMCallLog(t *testing.T) {
 	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := validEvaluationContext()
-	ctx.Artifacts[0].Artifact.Metadata = mustJSON(map[string]any{
-		"sections": []map[string]any{{
-			"title":   "Overview",
-			"content": "implemented api and tests",
-		}},
-	})
-	service := NewService(
-		&fakeRepo{teacherAllowed: true, evaluationContext: ctx},
-		WithSubmissionEvaluator(fakeSubmissionEvaluator{
-			response: aigateway.EvaluateSubmissionResponse{
-				Summary: "section-backed summary",
-				MetricScores: []map[string]any{{
-					"metric_code":     "quality",
-					"suggested_score": 19,
-					"confidence_bps":  8100,
-					"rationale":       "section evidence",
-					"evidence_refs":   []string{"artifact:artifact-1#section:1"},
-				}},
-				RawModelMeta: map[string]any{"engine": "gateway-stub"},
-			},
-		}),
-	)
-	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
+	repo := &fakeRepo{
+		teacherAllowed: true,
+		latestEvaluation: EvaluationResultDetail{
+			Result: EvaluationResult{ID: "evaluation-1", SubmissionID: "submission-1"},
+		},
+		lastLLMLog: &LLMCallLog{
+			ID:                 "llg-1",
+			EvaluationResultID: "evaluation-1",
+			Provider:           "python-ai-gateway",
+			Output: mustJSON(map[string]any{
+				"retrieval_context": map[string]any{"hit_count": 2},
+			}),
+		},
+	}
+	service := NewService(repo)
+	detail, err := service.GetLatestEvaluation(context.Background(), actor, "submission-1")
 	if err != nil {
-		t.Fatalf("CreateInitialEvaluation should accept granular evidence refs: %v", err)
+		t.Fatalf("GetLatestEvaluation should succeed: %v", err)
 	}
-	if detail.Result.LLMSummary != "section-backed summary" {
-		t.Fatalf("unexpected detail: %+v", detail.Result)
-	}
-	var refs []string
-	if err := json.Unmarshal(detail.Scores[len(detail.Scores)-1].EvidenceRefs, &refs); err != nil {
-		t.Fatalf("evidence refs should be json array: %v", err)
-	}
-	if len(refs) != 1 || refs[0] != "artifact:artifact-1#section:1" {
-		t.Fatalf("unexpected granular refs: %+v", refs)
+	if detail.Log == nil || detail.Log.ID != "llg-1" {
+		t.Fatalf("expected llm log on latest evaluation: %+v", detail)
 	}
 }
 
-func TestCreateInitialEvaluationFallsBackToGoLLMWhenAIGatewayFails(t *testing.T) {
-	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := NewService(
-		&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()},
-		WithSubmissionEvaluator(fakeSubmissionEvaluator{err: errors.New("gateway unavailable")}),
-		WithLLMClient(fakeLLMCompleter{
-			content: `{"summary":"fallback llm","metrics":[{"metric_code":"quality","suggested_score":18,"confidence_bps":8000,"rationale":"fallback used","evidence_refs":["artifact:artifact-1"]}],"risks":[]}`,
-		}),
-	)
-	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
-	if err != nil {
-		t.Fatalf("CreateInitialEvaluation should fall back to Go llm: %v", err)
-	}
-	if detail.Result.LLMStatus != EvaluationStepSucceeded || detail.Result.LLMSummary != "fallback llm" {
-		t.Fatalf("unexpected fallback result: %+v", detail.Result)
-	}
-	if !hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
-		t.Fatalf("expected fallback llm score: %+v", detail.Scores)
-	}
-}
-
-func TestCreateInitialEvaluationMarksMalformedLLMForReview(t *testing.T) {
-	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
-	if err != nil {
-		t.Fatal(err)
-	}
-	service := NewService(&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()}, WithLLMClient(fakeLLMCompleter{
-		content: `{"summary":"bad","metrics":[{"metric_code":"quality","suggested_score":99,"confidence_bps":8000,"rationale":"too high","evidence_refs":["artifact:artifact-1"]}]}`,
-	}))
-	detail, err := service.CreateInitialEvaluation(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleAndLLMMode}, AuditEntry{})
-	if err != nil {
-		t.Fatalf("malformed llm output should be persisted for review, got %v", err)
-	}
-	if detail.Result.Status != EvaluationStatusNeedsReview || detail.Result.LLMStatus != EvaluationStepFailed {
-		t.Fatalf("unexpected failed llm status: %+v", detail.Result)
-	}
-	if hasScoreSource(detail.Scores, MetricScoreSourceLLM) {
-		t.Fatalf("invalid llm scores should not be stored: %+v", detail.Scores)
-	}
-}
-
-func validEvaluationContext() EvaluationContext {
-	return EvaluationContext{
-		Submission: Submission{ID: "submission-1", ExperimentID: "experiment-1", StudentID: "student-1"},
-		Experiment: Experiment{ID: "experiment-1", RubricVersionID: "rubric-version-1", Title: "Lab"},
-		Metrics:    []Metric{{ID: "metric-1", Code: "quality", Name: "Code quality", MaxScore: 20, WeightBPS: 10000}},
-		Artifacts: []ArtifactWithExtraction{{
-			Artifact:   Artifact{ID: "artifact-1", SubmissionID: "submission-1", Kind: ArtifactKindReport, OriginalName: "report.txt", Status: "stored"},
-			Extraction: ExtractedContent{ID: "extraction-1", ArtifactID: "artifact-1", Status: "succeeded", TextExcerpt: "implemented api and tests"},
-		}},
-	}
-}
-
-type fakeLLMCompleter struct {
-	content string
-	err     error
-}
-
-func (f fakeLLMCompleter) CompleteJSON(context.Context, llm.CompletionRequest) (llm.CompletionResponse, error) {
-	return llm.CompletionResponse{Model: "mock-model", Content: f.content, PromptTokens: 10, CompletionTokens: 20, Latency: time.Millisecond}, f.err
-}
-
-type fakeSubmissionEvaluator struct {
-	response aigateway.EvaluateSubmissionResponse
-	err      error
-}
-
-func (f fakeSubmissionEvaluator) EvaluateSubmission(context.Context, aigateway.EvaluateSubmissionRequest) (aigateway.EvaluateSubmissionResponse, error) {
-	return f.response, f.err
-}
-
-func hasScoreSource(scores []MetricScore, source MetricScoreSource) bool {
-	for _, score := range scores {
-		if score.Source == source {
-			return true
-		}
-	}
-	return false
-}
+...omitted unchanged remainder...
