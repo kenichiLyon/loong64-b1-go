@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { collectEvaluationEvidenceRefs, resolveEvidenceSnippets } from '../lib/evidence';
 import type { EvaluationResultDetail, SubmissionDetail } from '../lib/types';
+import type { EvidenceSnippet } from '../lib/evidence';
 
 const props = defineProps<{
   evaluation: EvaluationResultDetail | null;
@@ -10,14 +11,20 @@ const props = defineProps<{
 
 const evidenceRefs = computed(() => collectEvaluationEvidenceRefs(props.evaluation));
 const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, evidenceRefs.value));
-
-function resolveScoreSnippets(refs: string[] | undefined) {
-  return resolveEvidenceSnippets(props.detail, refs ?? []);
-}
-
-function resolveFindingSnippets(ref: string | undefined) {
-  return ref ? resolveEvidenceSnippets(props.detail, [ref]) : [];
-}
+const scoreSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  for (const score of props.evaluation?.scores ?? []) {
+    entries[score.id] = resolveEvidenceSnippets(props.detail, score.evidence_refs ?? []);
+  }
+  return entries;
+});
+const findingSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  for (const finding of props.evaluation?.findings ?? []) {
+    entries[finding.id] = finding.evidence_ref ? resolveEvidenceSnippets(props.detail, [finding.evidence_ref]) : [];
+  }
+  return entries;
+});
 </script>
 
 <template>
@@ -35,8 +42,8 @@ function resolveFindingSnippets(ref: string | undefined) {
         <div v-if="score.evidence_refs?.length" class="chip-list">
           <span v-for="ref in score.evidence_refs.filter((item) => item.trim() !== '')" :key="ref" class="chip">{{ ref }}</span>
         </div>
-        <div v-if="resolveScoreSnippets(score.evidence_refs).length" class="snippet-list inline-snippets">
-          <article v-for="snippet in resolveScoreSnippets(score.evidence_refs)" :key="snippet.ref" class="snippet-card">
+        <div v-if="scoreSnippetsByID[score.id]?.length" class="snippet-list inline-snippets">
+          <article v-for="snippet in scoreSnippetsByID[score.id]" :key="snippet.ref" class="snippet-card">
             <strong>{{ snippet.title }}</strong>
             <small>{{ snippet.ref }}</small>
             <p>{{ snippet.text }}</p>
@@ -50,8 +57,8 @@ function resolveFindingSnippets(ref: string | undefined) {
         <strong>{{ finding.severity }} / {{ finding.category }}</strong>
         <p>{{ finding.message }}</p>
         <small v-if="finding.evidence_ref">{{ finding.evidence_ref }}</small>
-        <div v-if="resolveFindingSnippets(finding.evidence_ref).length" class="snippet-list inline-snippets">
-          <article v-for="snippet in resolveFindingSnippets(finding.evidence_ref)" :key="snippet.ref" class="snippet-card">
+        <div v-if="findingSnippetsByID[finding.id]?.length" class="snippet-list inline-snippets">
+          <article v-for="snippet in findingSnippetsByID[finding.id]" :key="snippet.ref" class="snippet-card">
             <strong>{{ snippet.title }}</strong>
             <small>{{ snippet.ref }}</small>
             <p>{{ snippet.text }}</p>
