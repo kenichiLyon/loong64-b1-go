@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, watch } from 'vue';
 import { resolveEvidenceSnippets } from '../lib/evidence';
+import type { EvidenceSnippet } from '../lib/evidence';
 import type { EvaluationResultDetail, SubmissionDetail, TeacherMetricScore, TeacherReviewDetail } from '../lib/types';
 
 const props = defineProps<{
@@ -21,6 +22,16 @@ const state = reactive({
 });
 
 const published = computed(() => props.review?.review.status === 'published');
+const reviewScoreSnippetsByKey = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  const evaluationByID = new Map((props.evaluation?.scores ?? []).map((score) => [score.id, score] as const));
+  const evaluationByMetric = new Map((props.evaluation?.scores ?? []).map((score) => [score.metric_code, score] as const));
+  for (const score of state.scores) {
+    const match = (score.source_metric_score_id ? evaluationByID.get(score.source_metric_score_id) : undefined) ?? evaluationByMetric.get(score.metric_code);
+    entries[reviewScoreKey(score.metric_code, score.source_metric_score_id)] = resolveEvidenceSnippets(props.detail, match?.evidence_refs ?? []);
+  }
+  return entries;
+});
 const evidenceRefs = computed(() => {
   if (!props.evaluation) {
     return [];
@@ -95,6 +106,10 @@ function save() {
     })),
   });
 }
+
+function reviewScoreKey(metricCode: string, sourceMetricScoreID?: string) {
+  return `${metricCode}::${sourceMetricScoreID ?? ''}`;
+}
 </script>
 
 <template>
@@ -113,6 +128,13 @@ function save() {
         <input v-model.number="score.final_score" :disabled="published" type="number" min="0" :max="score.max_score" />
         <small>/ {{ score.max_score }} · {{ score.source }}</small>
         <textarea v-model="score.adjustment_reason" :disabled="published" placeholder="改分理由或复核说明" />
+        <div v-if="reviewScoreSnippetsByKey[reviewScoreKey(score.metric_code, score.source_metric_score_id)]?.length" class="snippet-list inline-snippets">
+          <article v-for="snippet in reviewScoreSnippetsByKey[reviewScoreKey(score.metric_code, score.source_metric_score_id)]" :key="snippet.ref" class="snippet-card">
+            <strong>{{ snippet.title }}</strong>
+            <small>{{ snippet.ref }}</small>
+            <p>{{ snippet.text }}</p>
+          </article>
+        </div>
       </label>
     </div>
     <p v-else class="muted">先运行初评或读取已有复核结果。</p>
