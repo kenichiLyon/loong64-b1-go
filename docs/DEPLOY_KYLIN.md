@@ -97,13 +97,21 @@ Python 微服务代码目录：
 cd /opt/loong64-b1-go/python-ai-gateway
 python3 -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -r requirements.txt
 ```
 
 如果目标机没有外网：
 
 - 需要预先准备 Python wheel 缓存或内网源
 - 这是部署时必须留档的事项
+
+当前推荐的可复现安装方式就是：
+
+```bash
+pip install -r requirements.txt
+```
+
+也就是说，部署并不要求额外引入 `uv` 之类的 Python 包管理器。
 
 ## 6. Go 环境变量
 
@@ -204,8 +212,6 @@ Nginx 示例见：
 - `Go 是业务服务`
 - `Python 是推理服务`
 
-所以部署说明确实需要修改。  
-如果文档里只写 Go 服务，那已经落后于当前项目结构了。
 
 ## 11. 验收与留档
 

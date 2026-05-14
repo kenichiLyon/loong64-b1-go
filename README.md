@@ -131,7 +131,7 @@ PUT  /api/v1/admin/users/{userID}/password
 cd python-ai-gateway
 python -m venv .venv
 . .venv/bin/activate
-pip install -e .
+pip install -r requirements.txt
 uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 ```
 
@@ -141,7 +141,7 @@ Windows PowerShell：
 cd python-ai-gateway
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -e .
+pip install -r requirements.txt
 uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 ```
 
@@ -320,6 +320,7 @@ npm run build
 推荐的最小调试命令：
 
 ```bash
+pip install -r python-ai-gateway/requirements.txt
 python -m py_compile python-ai-gateway/ai_gateway/app.py python-ai-gateway/ai_gateway/models.py python-ai-gateway/ai_gateway/parser.py python-ai-gateway/ai_gateway/evaluator.py python-ai-gateway/ai_gateway/retrieval.py
 ```
 
