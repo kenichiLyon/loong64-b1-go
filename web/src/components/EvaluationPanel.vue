@@ -41,7 +41,7 @@ const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, ev
     <section v-if="evidenceSnippets.length" class="evidence-card">
       <p class="eyebrow">证据片段</p>
       <div class="chip-list">
-        <span v-for="ref in evidenceRefs" :key="ref" class="chip">{{ ref }}</span>
+        <span v-for="snippet in evidenceSnippets" :key="snippet.ref" class="chip">{{ snippet.ref }}</span>
       </div>
       <div class="snippet-list">
         <article v-for="snippet in evidenceSnippets" :key="snippet.ref" class="snippet-card">
