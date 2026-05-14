@@ -328,15 +328,21 @@ label {
 
 .artifact-list,
 .finding-list,
-.review-table {
+.review-table,
+.snippet-list {
   display: grid;
   gap: 12px;
 }
 
 .artifact-item p,
 .metric-card p,
-.finding p {
+.finding p,
+.snippet-card p {
   margin-bottom: 0;
+}
+
+.snippet-card small {
+  color: var(--muted);
 }
 
 .finding.high,
