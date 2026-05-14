@@ -16,6 +16,9 @@ defineProps<{ evaluation: EvaluationResultDetail | null }>();
         <span>{{ score.source }}</span>
         <strong>{{ score.metric_code }}：{{ score.suggested_score }}/{{ score.max_score }}</strong>
         <p>{{ score.rationale }}</p>
+        <div v-if="score.evidence_refs?.length" class="chip-list">
+          <span v-for="ref in score.evidence_refs.filter((item) => item.trim() !== '')" :key="ref" class="chip">{{ ref }}</span>
+        </div>
       </article>
     </div>
 
@@ -23,6 +26,7 @@ defineProps<{ evaluation: EvaluationResultDetail | null }>();
       <article v-for="finding in evaluation.findings" :key="finding.id" :class="['finding', finding.severity]">
         <strong>{{ finding.severity }} / {{ finding.category }}</strong>
         <p>{{ finding.message }}</p>
+        <small v-if="finding.evidence_ref">{{ finding.evidence_ref }}</small>
       </article>
     </div>
 
