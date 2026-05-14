@@ -1,10 +1,14 @@
 <script setup lang="ts">
+import { computed } from 'vue';
+import { resolveArtifactEvidenceOutlines } from '../lib/evidence';
 import type { SubmissionDetail, TeacherReviewDetail } from '../lib/types';
 
-defineProps<{
+const props = defineProps<{
   detail: SubmissionDetail | null;
   review?: TeacherReviewDetail | null;
 }>();
+
+const evidenceOutlines = computed(() => resolveArtifactEvidenceOutlines(props.detail));
 </script>
 
 <template>
@@ -40,6 +44,29 @@ defineProps<{
           <span>{{ item.artifact.kind }} / {{ item.extraction.status }}</span>
         </div>
         <p>{{ item.extraction.text_excerpt || item.extraction.error || '暂无摘要' }}</p>
+      </article>
+    </div>
+
+    <div v-if="evidenceOutlines.length" class="artifact-list">
+      <article v-for="outline in evidenceOutlines" :key="outline.artifactID" class="artifact-item">
+        <div>
+          <strong>{{ outline.artifactName }}</strong>
+          <span>{{ outline.sections.length }} sections / {{ outline.evidence.length }} evidence</span>
+        </div>
+        <div v-if="outline.sections.length" class="snippet-list">
+          <article v-for="snippet in outline.sections" :key="snippet.ref" class="snippet-card">
+            <strong>{{ snippet.title }}</strong>
+            <small>{{ snippet.ref }}</small>
+            <p>{{ snippet.text }}</p>
+          </article>
+        </div>
+        <div v-if="outline.evidence.length" class="snippet-list">
+          <article v-for="snippet in outline.evidence" :key="snippet.ref" class="snippet-card">
+            <strong>{{ snippet.title }}</strong>
+            <small>{{ snippet.ref }}</small>
+            <p>{{ snippet.text }}</p>
+          </article>
+        </div>
       </article>
     </div>
 

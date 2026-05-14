@@ -1,9 +1,16 @@
-import type { SubmissionDetail } from './types';
+import type { ArtifactWithExtraction, SubmissionDetail } from './types';
 
 export interface EvidenceSnippet {
   ref: string;
   title: string;
   text: string;
+}
+
+export interface ArtifactEvidenceOutline {
+  artifactID: string;
+  artifactName: string;
+  sections: EvidenceSnippet[];
+  evidence: EvidenceSnippet[];
 }
 
 type MetadataEntry = Record<string, unknown>;
@@ -24,6 +31,18 @@ export function resolveEvidenceSnippets(detail: SubmissionDetail | null, refs: s
     }
   }
   return snippets;
+}
+
+export function resolveArtifactEvidenceOutlines(detail: SubmissionDetail | null): ArtifactEvidenceOutline[] {
+  if (!detail) {
+    return [];
+  }
+  return detail.artifacts.map((item) => ({
+    artifactID: item.artifact.id,
+    artifactName: item.artifact.original_name,
+    sections: resolveArtifactEntries(item, 'section'),
+    evidence: resolveArtifactEntries(item, 'evidence'),
+  })).filter((item) => item.sections.length > 0 || item.evidence.length > 0);
 }
 
 function resolveEvidenceSnippet(detail: SubmissionDetail, ref: string): EvidenceSnippet | null {
@@ -76,6 +95,33 @@ function resolveEvidenceSnippet(detail: SubmissionDetail, ref: string): Evidence
     return null;
   }
   return { ref, title, text };
+}
+
+function resolveArtifactEntries(item: ArtifactWithExtraction, kind: 'section' | 'evidence'): EvidenceSnippet[] {
+  const entries = asEntryList(kind === 'section' ? item.artifact.metadata?.sections : item.artifact.metadata?.evidence);
+  return entries.map((entry, index) => {
+    const title = firstNonEmpty(
+      asText(entry.title),
+      asText(entry.heading),
+      asText(entry.name),
+      asText(entry.label),
+      `${item.artifact.original_name} · ${kind} ${index + 1}`,
+    );
+    const text = firstNonEmpty(
+      asText(entry.content),
+      asText(entry.text),
+      asText(entry.excerpt),
+      asText(entry.body),
+      asText(entry.summary),
+    );
+    return text === ''
+      ? null
+      : {
+          ref: `artifact:${item.artifact.id}#${kind}:${index + 1}`,
+          title,
+          text,
+        };
+  }).filter((entry): entry is EvidenceSnippet => entry !== null);
 }
 
 function asEntryList(value: unknown): MetadataEntry[] {
