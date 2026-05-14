@@ -1,4 +1,4 @@
-import type { ArtifactWithExtraction, SubmissionDetail } from './types';
+import type { ArtifactWithExtraction, EvaluationResultDetail, SubmissionDetail } from './types';
 
 export interface EvidenceSnippet {
   ref: string;
@@ -43,6 +43,28 @@ export function resolveArtifactEvidenceOutlines(detail: SubmissionDetail | null)
     sections: resolveArtifactEntries(item, 'section'),
     evidence: resolveArtifactEntries(item, 'evidence'),
   })).filter((item) => item.sections.length > 0 || item.evidence.length > 0);
+}
+
+export function collectEvaluationEvidenceRefs(evaluation: EvaluationResultDetail | null): string[] {
+  if (!evaluation) {
+    return [];
+  }
+  const refs = new Set<string>();
+  for (const score of evaluation.scores) {
+    for (const ref of score.evidence_refs ?? []) {
+      const trimmed = ref.trim();
+      if (trimmed !== '') {
+        refs.add(trimmed);
+      }
+    }
+  }
+  for (const finding of evaluation.findings) {
+    const trimmed = finding.evidence_ref?.trim();
+    if (trimmed) {
+      refs.add(trimmed);
+    }
+  }
+  return Array.from(refs);
 }
 
 function resolveEvidenceSnippet(detail: SubmissionDetail, ref: string): EvidenceSnippet | null {
