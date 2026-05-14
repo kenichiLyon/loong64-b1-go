@@ -32,27 +32,28 @@ const reviewScoreSnippetsByKey = computed<Record<string, EvidenceSnippet[]>>(() 
   }
   return entries;
 });
-const evidenceRefs = computed(() => {
-  if (!props.evaluation) {
-    return [];
+const findingSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
+  const entries: Record<string, EvidenceSnippet[]> = {};
+  for (const finding of props.evaluation?.findings ?? []) {
+    const ref = finding.evidence_ref?.trim();
+    entries[finding.id] = ref ? resolveEvidenceSnippets(props.detail, [ref]) : [];
   }
-  const refs = new Set<string>();
-  for (const score of props.evaluation.scores) {
-    for (const ref of score.evidence_refs ?? []) {
-      if (ref.trim() !== '') {
-        refs.add(ref);
-      }
-    }
-  }
-  for (const finding of props.evaluation.findings) {
-    if (finding.evidence_ref && finding.evidence_ref.trim() !== '') {
-      refs.add(finding.evidence_ref);
-    }
-  }
-  return Array.from(refs);
+  return entries;
 });
-
-const evidenceSnippets = computed(() => resolveEvidenceSnippets(props.detail, evidenceRefs.value));
+const evidenceSnippets = computed(() => {
+  const merged = new Map<string, EvidenceSnippet>();
+  for (const snippets of Object.values(reviewScoreSnippetsByKey.value)) {
+    for (const snippet of snippets) {
+      merged.set(snippet.ref, snippet);
+    }
+  }
+  for (const snippets of Object.values(findingSnippetsByID.value)) {
+    for (const snippet of snippets) {
+      merged.set(snippet.ref, snippet);
+    }
+  }
+  return Array.from(merged.values());
+});
 
 watch(
   () => [props.evaluation, props.review] as const,
@@ -144,12 +145,12 @@ function reviewScoreKey(metricCode: string, sourceMetricScoreID?: string) {
       <textarea v-model="state.teacher_comment" :disabled="published" placeholder="给学生的综合反馈" />
     </label>
 
-    <section v-if="evidenceRefs.length" class="evidence-card">
+    <section v-if="evidenceSnippets.length" class="evidence-card">
       <p class="eyebrow">AI 引用证据</p>
       <div class="chip-list">
-        <span v-for="ref in evidenceRefs" :key="ref" class="chip">{{ ref }}</span>
+        <span v-for="snippet in evidenceSnippets" :key="snippet.ref" class="chip">{{ snippet.ref }}</span>
       </div>
-      <div v-if="evidenceSnippets.length" class="snippet-list">
+      <div class="snippet-list">
         <article v-for="snippet in evidenceSnippets" :key="snippet.ref" class="snippet-card">
           <strong>{{ snippet.title }}</strong>
           <small>{{ snippet.ref }}</small>
