@@ -183,6 +183,7 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 ## 关键文档
 
 - 计划与交付门槛：`PLAN.md`
+- 项目架构梳理：`docs/ARCHITECTURE.md`
 - MVP 范围：`docs/MVP_DELIVERY.md`
 - UAT 手册：`docs/UAT_CHECKLIST.md`
 - 本地 UAT 记录：`docs/UAT_LOCAL_RESULTS.md`
