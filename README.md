@@ -21,6 +21,11 @@
 - `Go`：业务主系统、权限、教学流程、审计、报表、对象存储、数据库真相源
 - `Python`：推理微服务、附件解析增强、初评、检索、结构化输出清洗、本地模型适配
 
+同时，AI 相关实现已经明确拆分为：
+
+- `Go`：业务主系统、权限、教学流程、审计、报表、对象存储、数据库真相源
+- `Python`：推理微服务、附件解析增强、初评、检索、结构化输出清洗、本地模型适配
+
 已包含：
 
 - `AGENT.md`：固定开发流程和 GitHub MCP 远端提交流程。
@@ -31,6 +36,7 @@
 - `internal/jobs`：基础 Job 状态模型和内存执行器。
 - `internal/teaching`：用户、课程、班级、选课、评价模板版本、实训任务、提交、附件、规则核查、初评、教师复核发布和报表导出服务。
 - `internal/aigateway`：Go 到 Python 推理微服务的内部 HTTP client。
+- `internal/aigateway`：Go 到 Python 推理微服务的内部 HTTP client。
 - `.github/workflows`：Auto Build、自动代码审核与 CD 发布流水线。
 - `.github/workflows/container-smoke.yml`：容器次级交付的构建与启动冒烟验证。
 - `deploy/kylin`：银河麒麟 systemd 部署骨架和冒烟测试脚本。
@@ -38,6 +44,7 @@
 - `Containerfile` / `compose.yaml`：容器次级交付资产，默认用于开发、演示和 CI 冒烟。
 - `docs/SINGLE_BINARY_RUNTIME.md`：单二进制托管前端与默认 SQLite 方案。
 - `docs/DEPLOYMENT_ASSISTANT.md`：部署助手、上下文快照与工具确认说明。
+- `docs/PYTHON_AI_MIDDLEWARE.md`：Python 推理微服务职责、调试方式与部署边界。
 - `docs/PYTHON_AI_MIDDLEWARE.md`：Python 推理微服务职责、调试方式与部署边界。
 - `internal/authn`：登录、会话、cookie 与 actor 解析。
 - `internal/teaching/assets/fonts/NotoSansSC-VF.ttf`：内嵌 PDF 中文字体资产。
@@ -48,6 +55,53 @@
 - `api/openapi.yaml`：API 说明，当前版本 0.8.0。
 - `docs/`：安全基线、LoongArch 兼容性记录、CD 流水线、部署和本地 PostgreSQL 说明。
 - `web/`：Vue 3 + Vite + TypeScript PC Web MVP。
+
+## 当前架构
+
+当前推荐架构是 4 个核心运行单元：
+
+1. `Web 前端`
+2. `Go 主服务`
+3. `Python 推理微服务`
+4. `数据库 / 对象存储 / 模型服务`
+
+职责边界：
+
+- `Go 主服务`
+  - 对外 API
+  - 登录 / 会话 / 权限
+  - 教学业务主流程
+  - 审计日志
+  - 报表与导出
+  - 数据库和对象存储写入
+- `Python 推理微服务`
+  - `parse-artifact`
+  - `evaluate-submission`
+  - `build-retrieval-index`
+  - `query-retrieval`
+  - 本地模型 / OpenAI-compatible 模型调用
+  - 检索上下文和结构化输出整理
+
+也就是说：
+
+- `Go 管业务`
+- `Python 管推理`
+
+## 推荐运行方式
+
+开发态推荐同时启动：
+
+- Go 主服务
+- Python 推理微服务
+- SQLite 或 PostgreSQL
+- 本地模型服务或远端模型网关
+
+试点 / 生产态推荐部署为：
+
+- `loong64-b1-go.service`
+- `python-ai-gateway.service`
+
+如果不启用 Python 微服务，Go 侧仍能保留部分回退能力，但当前推荐路径已经是双服务协作。
 
 ## 当前架构
 
@@ -131,7 +185,7 @@ PUT  /api/v1/admin/users/{userID}/password
 cd python-ai-gateway
 python -m venv .venv
 . .venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 ```
 
@@ -141,7 +195,7 @@ Windows PowerShell：
 cd python-ai-gateway
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install -e .
 uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 ```
 
@@ -320,13 +374,13 @@ npm run build
 推荐的最小调试命令：
 
 ```bash
-pip install -r python-ai-gateway/requirements.txt
 python -m py_compile python-ai-gateway/ai_gateway/app.py python-ai-gateway/ai_gateway/models.py python-ai-gateway/ai_gateway/parser.py python-ai-gateway/ai_gateway/evaluator.py python-ai-gateway/ai_gateway/retrieval.py
 ```
 
 ## 部署与本地数据库
 
 - 银河麒麟 systemd 部署：`docs/DEPLOY_KYLIN.md`
+- Python 推理微服务说明：`docs/PYTHON_AI_MIDDLEWARE.md`
 - Python 推理微服务说明：`docs/PYTHON_AI_MIDDLEWARE.md`
 - Stage 7 部署验证清单：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
