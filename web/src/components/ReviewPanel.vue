@@ -31,6 +31,11 @@ const evidenceRefs = computed(() => {
       }
     }
   }
+  for (const finding of props.evaluation.findings) {
+    if (finding.evidence_ref && finding.evidence_ref.trim() !== '') {
+      refs.add(finding.evidence_ref);
+    }
+  }
   return Array.from(refs);
 });
 

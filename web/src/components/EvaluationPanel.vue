@@ -17,7 +17,7 @@ defineProps<{ evaluation: EvaluationResultDetail | null }>();
         <strong>{{ score.metric_code }}：{{ score.suggested_score }}/{{ score.max_score }}</strong>
         <p>{{ score.rationale }}</p>
         <div v-if="score.evidence_refs?.length" class="chip-list">
-          <span v-for="ref in score.evidence_refs" :key="ref" class="chip">{{ ref }}</span>
+          <span v-for="ref in score.evidence_refs.filter((item) => item.trim() !== '')" :key="ref" class="chip">{{ ref }}</span>
         </div>
       </article>
     </div>
