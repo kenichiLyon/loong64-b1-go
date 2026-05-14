@@ -34,9 +34,17 @@ const reviewScoreSnippetsByKey = computed<Record<string, EvidenceSnippet[]>>(() 
 });
 const findingSnippetsByID = computed<Record<string, EvidenceSnippet[]>>(() => {
   const entries: Record<string, EvidenceSnippet[]> = {};
+  const byRef = new Map<string, EvidenceSnippet[]>();
   for (const finding of props.evaluation?.findings ?? []) {
     const ref = finding.evidence_ref?.trim();
-    entries[finding.id] = ref ? resolveEvidenceSnippets(props.detail, [ref]) : [];
+    if (!ref) {
+      entries[finding.id] = [];
+      continue;
+    }
+    if (!byRef.has(ref)) {
+      byRef.set(ref, resolveEvidenceSnippets(props.detail, [ref]));
+    }
+    entries[finding.id] = byRef.get(ref) ?? [];
   }
   return entries;
 });
