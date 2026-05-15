@@ -7,6 +7,7 @@ import (
 
 const (
 	InitialEvaluationPromptVersion = "initial-evaluation-v1"
+	InitialEvaluationJobType       = "evaluation_initial"
 	RuleOnlyMode                   = "rule_only"
 	RuleAndLLMMode                 = "rule_and_llm"
 )
@@ -135,6 +136,7 @@ type EvaluationJob struct {
 	ID           string                       `json:"id"`
 	SubmissionID string                       `json:"submission_id"`
 	ActorID      string                       `json:"actor_id"`
+	ActorRoles   []Role                       `json:"-"`
 	Status       EvaluationJobStatus          `json:"status"`
 	Input        CreateInitialEvaluationInput `json:"input"`
 	Result       *EvaluationResultDetail      `json:"result,omitempty"`

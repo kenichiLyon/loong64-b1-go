@@ -3,6 +3,7 @@ package teaching
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
@@ -158,4 +159,80 @@ func TestSQLiteServiceSubmissionFlow(t *testing.T) {
 	if submission.ExperimentID != experiment.ID || submission.StudentID != student.ID {
 		t.Fatalf("unexpected submission: %+v", submission)
 	}
+}
+
+func TestSQLiteEvaluationJobPersistsStatusAndResult(t *testing.T) {
+	t.Parallel()
+
+	repo := newTestSQLiteRepository(t)
+	now := time.Now().UTC()
+	job, err := repo.CreateEvaluationJob(context.Background(), EvaluationJob{
+		ID:           "evj-test",
+		SubmissionID: "submission-1",
+		ActorID:      "teacher-1",
+		ActorRoles:   []Role{RoleTeacher},
+		Status:       EvaluationJobQueued,
+		Input:        CreateInitialEvaluationInput{Mode: RuleOnlyMode},
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}, AuditEntry{Action: "evaluation.initial_enqueue", TargetType: "submission", TargetID: "submission-1"})
+	if err != nil {
+		t.Fatalf("create evaluation job: %v", err)
+	}
+	if job.Status != EvaluationJobQueued || job.SubmissionID != "submission-1" {
+		t.Fatalf("unexpected created job: %+v", job)
+	}
+
+	claimed, err := repo.ClaimNextEvaluationJob(context.Background())
+	if err != nil {
+		t.Fatalf("claim evaluation job: %v", err)
+	}
+	if claimed.ID != job.ID || claimed.Status != EvaluationJobRunning || claimed.StartedAt == nil {
+		t.Fatalf("unexpected claimed job: %+v", claimed)
+	}
+
+	detail := EvaluationResultDetail{
+		Result: EvaluationResult{ID: "evr-test", SubmissionID: "submission-1", Status: EvaluationStatusCompleted},
+		Scores: []MetricScore{{
+			ID:                 "msc-test",
+			EvaluationResultID: "evr-test",
+			MetricID:           "metric-1",
+			MetricCode:         "quality",
+			Source:             MetricScoreSourceRule,
+			SuggestedScore:     18,
+			MaxScore:           20,
+		}},
+	}
+	if err := repo.CompleteEvaluationJob(context.Background(), job.ID, detail); err != nil {
+		t.Fatalf("complete evaluation job: %v", err)
+	}
+	loaded, err := repo.GetEvaluationJob(context.Background(), job.ID)
+	if err != nil {
+		t.Fatalf("get evaluation job: %v", err)
+	}
+	if loaded.Status != EvaluationJobSucceeded || loaded.FinishedAt == nil {
+		t.Fatalf("unexpected completed job: %+v", loaded)
+	}
+	if loaded.Result == nil || loaded.Result.Result.ID != "evr-test" || len(loaded.Result.Scores) != 1 {
+		t.Fatalf("completed job should include persisted result: %+v", loaded)
+	}
+}
+
+func newTestSQLiteRepository(t *testing.T) *SQLiteRepository {
+	t.Helper()
+	cfg := config.Config{
+		DBDriver:     "sqlite",
+		SQLitePath:   t.TempDir() + "/teaching.db",
+		UpgradeDir:   "../../migrations",
+		ReadyTimeout: 0,
+	}
+	pool, err := database.Open(context.Background(), cfg)
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(pool.Close)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(context.Background()); err != nil {
+		t.Fatalf("upgrade sqlite: %v", err)
+	}
+	return NewSQLiteRepository(pool)
 }

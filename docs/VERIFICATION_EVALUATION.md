@@ -1,12 +1,15 @@
 # 规则核查与 LLM 初评
 
-阶段 4 提供教师侧同步触发的规则核查和可选 LLM 初评能力。该阶段只产生“建议结果”，不写最终成绩，不向学生发布；教师复核、主观评分和发布流程放在阶段 5。
+阶段 4 提供教师侧规则核查和可选 LLM 初评能力。当前接口提交初评任务，Go 侧通过数据库 job queue 记录状态、结果和失败原因；该阶段只产生“建议结果”，不写最终成绩，不向学生发布；教师复核、主观评分和发布流程放在阶段 5。
 
 ## API
 
 - `POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`
   - `mode=rule_only`：仅运行本地规则核查，默认值，适合离线 CI 和未配置模型环境。
   - `mode=rule_and_llm`：先运行规则核查，再通过 OpenAI-compatible 网关生成 LLM 指标建议分。
+  - 返回初评 `job_id` 和当前任务状态。
+- `GET /api/v1/teacher/evaluations/jobs/{jobID}`
+  - 轮询初评任务状态；成功后返回本次初评结果。
 - `GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest`
   - 返回最新初评结果、规则发现和指标建议分。
 

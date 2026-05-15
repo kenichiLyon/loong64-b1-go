@@ -174,6 +174,12 @@ type Repository interface {
 	GetEvaluationContext(context.Context, string) (EvaluationContext, error)
 	CreateInitialEvaluation(context.Context, EvaluationResult, []RuleCheckFinding, []MetricScore, *LLMCallLog, AuditEntry) (EvaluationResultDetail, error)
 	GetLatestEvaluation(context.Context, string) (EvaluationResultDetail, error)
+	CreateEvaluationJob(context.Context, EvaluationJob, AuditEntry) (EvaluationJob, error)
+	GetEvaluationJob(context.Context, string) (EvaluationJob, error)
+	MarkEvaluationJobRunning(context.Context, string) (EvaluationJob, error)
+	ClaimNextEvaluationJob(context.Context) (EvaluationJob, error)
+	CompleteEvaluationJob(context.Context, string, EvaluationResultDetail) error
+	FailEvaluationJob(context.Context, string, string) error
 	EvaluationResultSubmissionID(context.Context, string) (string, error)
 	UpsertTeacherReview(context.Context, TeacherReview, []TeacherMetricScore, AuditEntry) (TeacherReviewDetail, error)
 	PublishTeacherReview(context.Context, string, string, AuditEntry) (TeacherReviewDetail, error)
@@ -199,8 +205,6 @@ type Service struct {
 	maxUploadBytes            int64
 	maxArtifactsPerSubmission int
 	llmClient                 LLMCompleter
-	evaluationJobsMu          sync.RWMutex
-	evaluationJobs            map[string]*EvaluationJob
 	evaluationQueue           chan string
 	evaluationWorkerOnce      sync.Once
 	evaluationWorkerLimit     int
@@ -264,7 +268,6 @@ func NewService(repo Repository, options ...ServiceOption) *Service {
 		repo:                      repo,
 		maxUploadBytes:            DefaultMaxUploadBytes,
 		maxArtifactsPerSubmission: DefaultMaxArtifactsPerSubmission,
-		evaluationJobs:            map[string]*EvaluationJob{},
 		evaluationQueue:           make(chan string, 128),
 		evaluationWorkerLimit:     2,
 	}

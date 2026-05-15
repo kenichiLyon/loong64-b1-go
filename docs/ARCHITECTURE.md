@@ -401,12 +401,15 @@ Python AI Worker 当前实现位于 `python-ai-gateway/`，使用 FastAPI。`AI 
 
 ```text
 教师触发 initial evaluation
-  -> Go 聚合 submission + experiment + rubric + artifacts
+  -> Go 创建 evaluation_initial job
+  -> 前端轮询 job 状态
+  -> Go worker 聚合 submission + experiment + rubric + artifacts
   -> EvaluateRules 生成规则发现项和 rule 分数
   -> mode=rule_and_llm 时优先走 Python evaluate-submission
   -> Python 构造检索上下文并调用模型
   -> 如 Python 不可用且 Go LLM 已配置，则 Go 直连 LLM 兜底
   -> 结果写入 evaluation_results / metric_scores / llm_call_logs
+  -> job 记录 succeeded / failed、错误和结果摘要
 ```
 
 输出约束：

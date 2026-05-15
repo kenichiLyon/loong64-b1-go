@@ -1191,6 +1191,134 @@ ORDER BY source, metric_code`, detail.Result.ID)
 	return detail, nil
 }
 
+func (r *PostgresRepository) CreateEvaluationJob(ctx context.Context, job EvaluationJob, audit AuditEntry) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	defer rollback(ctx, tx)
+	if err := scanEvaluationJob(tx.QueryRow(ctx, `
+INSERT INTO jobs (id, job_type, status, payload)
+VALUES ($1, $2, $3, $4)
+RETURNING id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at`,
+		job.ID, InitialEvaluationJobType, string(job.Status), marshalEvaluationJobPayload(job)), &job); err != nil {
+		return EvaluationJob{}, mapDBError(err)
+	}
+	if err := insertAudit(ctx, tx, audit); err != nil {
+		return EvaluationJob{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return EvaluationJob{}, err
+	}
+	return job, nil
+}
+
+func (r *PostgresRepository) GetEvaluationJob(ctx context.Context, jobID string) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := scanEvaluationJob(pool.QueryRow(ctx, `
+SELECT id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at
+FROM jobs
+WHERE id = $1 AND job_type = $2`, jobID, InitialEvaluationJobType), &job); err != nil {
+		return EvaluationJob{}, mapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *PostgresRepository) MarkEvaluationJobRunning(ctx context.Context, jobID string) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := scanEvaluationJob(pool.QueryRow(ctx, `
+UPDATE jobs
+SET status = $3, attempts = attempts + 1, started_at = COALESCE(started_at, now()), updated_at = now()
+WHERE id = $1 AND job_type = $2 AND status = $4
+RETURNING id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobRunning), string(EvaluationJobQueued)), &job); err != nil {
+		return EvaluationJob{}, mapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *PostgresRepository) ClaimNextEvaluationJob(ctx context.Context) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := scanEvaluationJob(pool.QueryRow(ctx, `
+WITH next_job AS (
+  SELECT id
+  FROM jobs
+  WHERE job_type = $1 AND status = $2 AND run_after <= now()
+  ORDER BY run_after, created_at
+  LIMIT 1
+  FOR UPDATE SKIP LOCKED
+)
+UPDATE jobs
+SET status = $3, attempts = attempts + 1, started_at = COALESCE(started_at, now()), updated_at = now()
+FROM next_job
+WHERE jobs.id = next_job.id
+RETURNING jobs.id, jobs.status, jobs.payload, COALESCE(jobs.error, ''), jobs.created_at, jobs.updated_at, jobs.started_at, jobs.finished_at`,
+		InitialEvaluationJobType, string(EvaluationJobQueued), string(EvaluationJobRunning)), &job); err != nil {
+		return EvaluationJob{}, mapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *PostgresRepository) CompleteEvaluationJob(ctx context.Context, jobID string, detail EvaluationResultDetail) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	tx, err := pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer rollback(ctx, tx)
+	job, err := loadEvaluationJobForUpdate(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	result := cloneEvaluationResultDetail(detail)
+	job.Result = &result
+	if _, err := tx.Exec(ctx, `
+UPDATE jobs
+SET status = $3, payload = $4, error = NULL, finished_at = now(), updated_at = now()
+WHERE id = $1 AND job_type = $2`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobSucceeded), marshalEvaluationJobPayload(job)); err != nil {
+		return mapDBError(err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *PostgresRepository) FailEvaluationJob(ctx context.Context, jobID string, message string) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	var updatedID string
+	err = pool.QueryRow(ctx, `
+UPDATE jobs
+SET status = $3, error = $4, finished_at = now(), updated_at = now()
+WHERE id = $1 AND job_type = $2
+RETURNING id`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobFailed), message).Scan(&updatedID)
+	if err != nil {
+		return mapDBError(err)
+	}
+	return nil
+}
+
 func (r *PostgresRepository) EvaluationResultSubmissionID(ctx context.Context, evaluationResultID string) (string, error) {
 	pool, err := r.pool()
 	if err != nil {
@@ -1556,6 +1684,34 @@ func scanEvaluationResult(row pgx.Row, result *EvaluationResult) error {
 	result.Status = EvaluationStatus(status)
 	result.RuleStatus = EvaluationStepStatus(ruleStatus)
 	result.LLMStatus = EvaluationStepStatus(llmStatus)
+	return nil
+}
+
+func loadEvaluationJobForUpdate(ctx context.Context, tx pgx.Tx, jobID string) (EvaluationJob, error) {
+	var job EvaluationJob
+	if err := scanEvaluationJob(tx.QueryRow(ctx, `
+SELECT id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at
+FROM jobs
+WHERE id = $1 AND job_type = $2
+FOR UPDATE`, jobID, InitialEvaluationJobType), &job); err != nil {
+		return EvaluationJob{}, mapDBError(err)
+	}
+	return job, nil
+}
+
+func scanEvaluationJob(row pgx.Row, job *EvaluationJob) error {
+	var id, status, message string
+	var payload []byte
+	var startedAt, finishedAt pgtype.Timestamptz
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&id, &status, &payload, &message, &createdAt, &updatedAt, &startedAt, &finishedAt); err != nil {
+		return err
+	}
+	decoded, err := buildEvaluationJobFromPayload(id, status, message, payload, createdAt, updatedAt, nullableTime(startedAt), nullableTime(finishedAt))
+	if err != nil {
+		return err
+	}
+	*job = decoded
 	return nil
 }
 
