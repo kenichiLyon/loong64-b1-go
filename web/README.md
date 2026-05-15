@@ -33,7 +33,7 @@ npm run lint
 npm run build
 ```
 
-构建产物输出到 `web/dist`，目标部署可由 Go 服务前置 Nginx 或银河麒麟 systemd 环境中的静态资源服务托管。
+构建产物输出到 `web/dist`。目标部署默认通过 `go build -tags webui ./cmd/server` 把前端嵌入 Go 主服务，由 Go 直接托管静态文件和 SPA fallback。
 
 ## 登录与开发态身份
 

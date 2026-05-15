@@ -17,10 +17,8 @@ check_json "/health/live" '"service":"loong64-b1-go"'
 echo "Checking ready health"
 check_json "/health/ready" '"service":"loong64-b1-go"'
 
-echo "Checking root metadata"
+echo "Checking embedded web UI"
 root_body="$(curl -fsS "$BASE_URL/")"
-echo "$root_body" | grep '"service":"loong64-b1-go"' >/dev/null
-echo "$root_body" | grep '"live":"/health/live"' >/dev/null
-echo "$root_body" | grep '"ready":"/health/ready"' >/dev/null
+echo "$root_body" | grep '<div id="app">' >/dev/null
 
 echo "Deployment verification passed."
