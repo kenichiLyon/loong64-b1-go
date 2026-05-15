@@ -124,7 +124,7 @@ Python 是 AI 任务执行层，负责：
    - `go test ./...`
    - `npm run build --prefix web`
    - `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server`
-   - `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate`
+   - `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade`
 4. UAT 已实际执行并留痕
 5. LoongArch / 银河麒麟部署验收已实际执行并留痕
 6. README / PLAN / 部署文档 / Python 微服务文档一致
@@ -220,7 +220,7 @@ Python 是 AI 任务执行层，负责：
 每轮新增能力都要过这几个门槛：
 
 - `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server`
-- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate`
+- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade`
 - 新依赖是否支持 `linux/loong64`
 - Python 依赖是否可在目标机安装
 - 是否引入难以在银河麒麟维护的运行时
