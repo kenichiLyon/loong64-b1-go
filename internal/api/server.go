@@ -119,6 +119,10 @@ func NewHandler(deps Dependencies) http.Handler {
 	mux.HandleFunc("POST /api/v1/bootstrap/admin", bootstrapHandler.createAdmin)
 	mux.HandleFunc("GET /api/v1/admin/runtime-config", runtimeConfigHandler.get)
 	mux.HandleFunc("PUT /api/v1/admin/runtime-config", runtimeConfigHandler.put)
+	aiWorkerHandler := newAIWorkerHandler(teachingService, deps.Config, logger)
+	mux.HandleFunc("POST /internal/ai-worker/evaluation-jobs/claim", aiWorkerHandler.claimEvaluationJob)
+	mux.HandleFunc("POST /internal/ai-worker/evaluation-jobs/{jobID}/complete", aiWorkerHandler.completeEvaluationJob)
+	mux.HandleFunc("POST /internal/ai-worker/evaluation-jobs/{jobID}/fail", aiWorkerHandler.failEvaluationJob)
 	teaching.RegisterRoutes(mux, teaching.HTTPDependencies{
 		Service:       teachingService,
 		AppEnv:        deps.Config.AppEnv,

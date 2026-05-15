@@ -16,6 +16,8 @@ func TestLoadUsesDefaults(t *testing.T) {
 	t.Setenv("LLM_TIMEOUT", "")
 	t.Setenv("AI_GATEWAY_BASE_URL", "")
 	t.Setenv("AI_GATEWAY_TIMEOUT", "")
+	t.Setenv("AI_WORKER_TOKEN", "")
+	t.Setenv("EVALUATION_WORKER_MODE", "")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "127.0.0.1:8080" {
@@ -48,6 +50,12 @@ func TestLoadUsesDefaults(t *testing.T) {
 	if cfg.AIGatewayTimeout != 10*time.Second {
 		t.Fatalf("unexpected AIGatewayTimeout: %s", cfg.AIGatewayTimeout)
 	}
+	if cfg.AIWorkerToken != "" {
+		t.Fatal("AIWorkerToken should be empty by default")
+	}
+	if cfg.EvaluationWorkerMode != "inline" {
+		t.Fatalf("unexpected EvaluationWorkerMode: %s", cfg.EvaluationWorkerMode)
+	}
 }
 
 func TestLoadParsesOverrides(t *testing.T) {
@@ -63,6 +71,8 @@ func TestLoadParsesOverrides(t *testing.T) {
 	t.Setenv("LLM_TIMEOUT", "45s")
 	t.Setenv("AI_GATEWAY_BASE_URL", "http://127.0.0.1:8081")
 	t.Setenv("AI_GATEWAY_TIMEOUT", "2500ms")
+	t.Setenv("AI_WORKER_TOKEN", "worker-secret")
+	t.Setenv("EVALUATION_WORKER_MODE", "external")
 
 	cfg := Load()
 	if cfg.HTTPAddr != "0.0.0.0:9000" {
@@ -94,6 +104,12 @@ func TestLoadParsesOverrides(t *testing.T) {
 	}
 	if cfg.AIGatewayTimeout != 2500*time.Millisecond {
 		t.Fatalf("unexpected AIGatewayTimeout: %s", cfg.AIGatewayTimeout)
+	}
+	if cfg.AIWorkerToken != "worker-secret" {
+		t.Fatalf("unexpected AIWorkerToken: %q", cfg.AIWorkerToken)
+	}
+	if cfg.EvaluationWorkerMode != "external" {
+		t.Fatalf("unexpected EvaluationWorkerMode: %s", cfg.EvaluationWorkerMode)
 	}
 }
 

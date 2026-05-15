@@ -46,11 +46,13 @@ func (s *Service) SubmitInitialEvaluationJob(ctx context.Context, actor Actor, s
 	if err != nil {
 		return EvaluationJob{}, err
 	}
-	s.startEvaluationWorkers()
-	select {
-	case s.evaluationQueue <- created.ID:
-	default:
-		// The polling worker can still claim the persisted job even when the local wake-up channel is saturated.
+	if s.evaluationWorkersEnabled {
+		s.startEvaluationWorkers()
+		select {
+		case s.evaluationQueue <- created.ID:
+		default:
+			// The polling worker can still claim the persisted job even when the local wake-up channel is saturated.
+		}
 	}
 	return cloneEvaluationJob(created), nil
 }
@@ -71,7 +73,7 @@ func (s *Service) GetEvaluationJob(ctx context.Context, actor Actor, jobID strin
 }
 
 func (s *Service) StartEvaluationWorkers() {
-	if s == nil || s.repo == nil {
+	if s == nil || s.repo == nil || !s.evaluationWorkersEnabled {
 		return
 	}
 	s.startEvaluationWorkers()
@@ -147,6 +149,120 @@ func (s *Service) runClaimedEvaluationJob(ctx context.Context, job EvaluationJob
 	_ = s.repo.CompleteEvaluationJob(ctx, job.ID, detail)
 }
 
+type WorkerEvaluationJob struct {
+	Job               EvaluationJob                       `json:"job"`
+	EvaluationRequest *aigateway.EvaluateSubmissionRequest `json:"evaluation_request,omitempty"`
+}
+
+func (s *Service) ClaimInitialEvaluationJobForWorker(ctx context.Context) (WorkerEvaluationJob, bool, error) {
+	if err := s.ready(); err != nil {
+		return WorkerEvaluationJob{}, false, err
+	}
+	job, err := s.repo.ClaimNextEvaluationJob(ctx)
+	if err != nil {
+		if ErrorKindOf(err) == KindNotFound {
+			return WorkerEvaluationJob{}, false, nil
+		}
+		return WorkerEvaluationJob{}, false, err
+	}
+	work := WorkerEvaluationJob{Job: cloneEvaluationJob(job)}
+	if normalizeEvaluationMode(job.Input.Mode) == RuleAndLLMMode {
+		request, err := s.buildWorkerEvaluationRequest(ctx, job)
+		if err != nil {
+			_ = s.repo.FailEvaluationJob(ctx, job.ID, err.Error())
+			return WorkerEvaluationJob{}, false, err
+		}
+		work.EvaluationRequest = &request
+	}
+	return work, true, nil
+}
+
+func (s *Service) CompleteInitialEvaluationJobFromWorker(ctx context.Context, jobID string, response *aigateway.EvaluateSubmissionResponse) (EvaluationJob, error) {
+	if err := s.ready(); err != nil {
+		return EvaluationJob{}, err
+	}
+	jobID = strings.TrimSpace(jobID)
+	job, err := s.repo.GetEvaluationJob(ctx, jobID)
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	if job.Status != EvaluationJobRunning {
+		return EvaluationJob{}, conflictError("evaluation job is not running")
+	}
+	if normalizeEvaluationMode(job.Input.Mode) == RuleAndLLMMode && response == nil {
+		return EvaluationJob{}, validationError("evaluation response is required")
+	}
+	actor, err := actorFromEvaluationJob(job)
+	if err != nil {
+		_ = s.repo.FailEvaluationJob(ctx, job.ID, err.Error())
+		return EvaluationJob{}, err
+	}
+	detail, err := s.createInitialEvaluation(ctx, actor, job.SubmissionID, job.Input, AuditEntry{
+		Action:     "evaluation.initial_create",
+		ActorID:    job.ActorID,
+		TargetType: "submission",
+		TargetID:   job.SubmissionID,
+	}, response)
+	if err != nil {
+		_ = s.repo.FailEvaluationJob(ctx, job.ID, err.Error())
+		return EvaluationJob{}, err
+	}
+	if err := s.repo.CompleteEvaluationJob(ctx, job.ID, detail); err != nil {
+		return EvaluationJob{}, err
+	}
+	completed, err := s.repo.GetEvaluationJob(ctx, job.ID)
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	return cloneEvaluationJob(completed), nil
+}
+
+func (s *Service) FailInitialEvaluationJobFromWorker(ctx context.Context, jobID, message string) (EvaluationJob, error) {
+	if err := s.ready(); err != nil {
+		return EvaluationJob{}, err
+	}
+	jobID = strings.TrimSpace(jobID)
+	message = sanitizeEvidenceText(strings.TrimSpace(message), 500)
+	if message == "" {
+		message = "worker failed evaluation job"
+	}
+	job, err := s.repo.GetEvaluationJob(ctx, jobID)
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	if job.Status != EvaluationJobRunning {
+		return EvaluationJob{}, conflictError("evaluation job is not running")
+	}
+	if err := s.repo.FailEvaluationJob(ctx, job.ID, message); err != nil {
+		return EvaluationJob{}, err
+	}
+	failed, err := s.repo.GetEvaluationJob(ctx, job.ID)
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	return cloneEvaluationJob(failed), nil
+}
+
+func (s *Service) buildWorkerEvaluationRequest(ctx context.Context, job EvaluationJob) (aigateway.EvaluateSubmissionRequest, error) {
+	evalCtx, err := s.repo.GetEvaluationContext(ctx, job.SubmissionID)
+	if err != nil {
+		return aigateway.EvaluateSubmissionRequest{}, err
+	}
+	if len(evalCtx.Metrics) == 0 {
+		return aigateway.EvaluateSubmissionRequest{}, validationError("submission experiment has no rubric metrics")
+	}
+	_, evidenceSnapshot := buildEvidenceSnapshot(evalCtx)
+	return buildAIGatewayEvaluationRequest(evalCtx, evidenceSnapshot, normalizeEvaluationMode(job.Input.Mode)), nil
+}
+
+func actorFromEvaluationJob(job EvaluationJob) (Actor, error) {
+	actorRoles := job.ActorRoles
+	if len(actorRoles) == 0 {
+		actorRoles = []Role{RoleTeacher}
+	}
+	return NewActor(job.ActorID, actorRoles)
+}
+
 func cloneEvaluationJob(job EvaluationJob) EvaluationJob {
 	clone := job
 	if job.Result != nil {
@@ -167,6 +283,10 @@ func cloneEvaluationResultDetail(detail EvaluationResultDetail) EvaluationResult
 }
 
 func (s *Service) CreateInitialEvaluation(ctx context.Context, actor Actor, submissionID string, input CreateInitialEvaluationInput, audit AuditEntry) (EvaluationResultDetail, error) {
+	return s.createInitialEvaluation(ctx, actor, submissionID, input, audit, nil)
+}
+
+func (s *Service) createInitialEvaluation(ctx context.Context, actor Actor, submissionID string, input CreateInitialEvaluationInput, audit AuditEntry, workerResponse *aigateway.EvaluateSubmissionResponse) (EvaluationResultDetail, error) {
 	if err := s.ready(); err != nil {
 		return EvaluationResultDetail{}, err
 	}
@@ -203,7 +323,15 @@ func (s *Service) CreateInitialEvaluation(ctx context.Context, actor Actor, subm
 	}
 	var llmLog *LLMCallLog
 	if mode == RuleAndLLMMode {
-		llmScores, summary, log, llmErr := s.evaluateWithConfiguredAI(ctx, evalCtx, evaluationID, evidenceSnapshot, mode)
+		var llmScores []MetricScore
+		var summary string
+		var log *LLMCallLog
+		var llmErr error
+		if workerResponse != nil {
+			llmScores, summary, log, llmErr = s.evaluateWithWorkerResponse(evalCtx, evaluationID, evidenceSnapshot, *workerResponse, mode)
+		} else {
+			llmScores, summary, log, llmErr = s.evaluateWithConfiguredAI(ctx, evalCtx, evaluationID, evidenceSnapshot, mode)
+		}
 		llmLog = log
 		if llmErr != nil {
 			result.LLMStatus = EvaluationStepFailed
@@ -329,6 +457,36 @@ func (s *Service) evaluateWithAIGateway(ctx context.Context, evalCtx EvaluationC
 		log.Status = "failed"
 		log.Error = sanitizeEvidenceText(err.Error(), 300)
 		return nil, "", log, err
+	}
+	if strings.TrimSpace(response.Error) != "" {
+		log.Status = "failed"
+		log.Error = sanitizeEvidenceText(response.Error, 300)
+		return nil, "", log, validationError(response.Error)
+	}
+	log.Status = "succeeded"
+	scores, summary, err := validateAIGatewayOutput(response, evaluationID, evalCtx.Metrics, allowedEvidenceRefs(evalCtx))
+	if err != nil {
+		log.Status = "failed"
+		log.Error = sanitizeEvidenceText(err.Error(), 300)
+		return nil, "", log, err
+	}
+	return scores, summary, log, nil
+}
+
+func (s *Service) evaluateWithWorkerResponse(evalCtx EvaluationContext, evaluationID string, evidenceSnapshot json.RawMessage, response aigateway.EvaluateSubmissionResponse, mode string) ([]MetricScore, string, *LLMCallLog, error) {
+	request := buildAIGatewayEvaluationRequest(evalCtx, evidenceSnapshot, mode)
+	log := &LLMCallLog{
+		ID:                 NewID("llg"),
+		EvaluationResultID: evaluationID,
+		Provider:           "python-ai-worker",
+		PromptVersion:      InitialEvaluationPromptVersion,
+		InputHash:          sha256Hex(mustJSON(request)),
+		Output:             json.RawMessage(`{}`),
+		Status:             "skipped",
+	}
+	if len(response.RawModelMeta) > 0 {
+		log.Output = mustJSON(response.RawModelMeta)
+		log.Model = firstStringMapValue(response.RawModelMeta, "model", "engine")
 	}
 	if strings.TrimSpace(response.Error) != "" {
 		log.Status = "failed"

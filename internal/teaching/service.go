@@ -208,6 +208,7 @@ type Service struct {
 	evaluationQueue           chan string
 	evaluationWorkerOnce      sync.Once
 	evaluationWorkerLimit     int
+	evaluationWorkersEnabled  bool
 }
 
 type ArtifactStore interface {
@@ -263,6 +264,12 @@ func WithEvaluationWorkerLimit(limit int) ServiceOption {
 	}
 }
 
+func WithEvaluationWorkersEnabled(enabled bool) ServiceOption {
+	return func(s *Service) {
+		s.evaluationWorkersEnabled = enabled
+	}
+}
+
 func NewService(repo Repository, options ...ServiceOption) *Service {
 	service := &Service{
 		repo:                      repo,
@@ -270,6 +277,7 @@ func NewService(repo Repository, options ...ServiceOption) *Service {
 		maxArtifactsPerSubmission: DefaultMaxArtifactsPerSubmission,
 		evaluationQueue:           make(chan string, 128),
 		evaluationWorkerLimit:     2,
+		evaluationWorkersEnabled:  true,
 	}
 	for _, option := range options {
 		option(service)

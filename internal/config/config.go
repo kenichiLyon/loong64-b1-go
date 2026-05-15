@@ -23,6 +23,8 @@ type Config struct {
 	AIGatewayBaseURL          string
 	AIGatewayAPIKey           string
 	AIGatewayTimeout          time.Duration
+	AIWorkerToken             string
+	EvaluationWorkerMode      string
 	LLMBaseURL                string
 	LLMModel                  string
 	LLMAPIKey                 string
@@ -94,6 +96,8 @@ func Load() Config {
 		AIGatewayBaseURL:          getenv("AI_GATEWAY_BASE_URL", ""),
 		AIGatewayAPIKey:           getenv("AI_GATEWAY_API_KEY", ""),
 		AIGatewayTimeout:          durationFromEnv("AI_GATEWAY_TIMEOUT", 10*time.Second),
+		AIWorkerToken:             strings.TrimSpace(getenv("AI_WORKER_TOKEN", "")),
+		EvaluationWorkerMode:      evaluationWorkerModeFromEnv("EVALUATION_WORKER_MODE", "inline"),
 		LLMBaseURL:                getenv("LLM_BASE_URL", ""),
 		LLMModel:                  getenv("LLM_MODEL", ""),
 		LLMAPIKey:                 getenv("LLM_API_KEY", ""),
@@ -113,6 +117,19 @@ func Load() Config {
 		ReadHeaderTimeout:         durationFromEnv("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
 		ShutdownTimeout:           durationFromEnv("HTTP_SHUTDOWN_TIMEOUT", 10*time.Second),
 		ReadyTimeout:              durationFromEnv("READY_TIMEOUT", 2*time.Second),
+	}
+}
+
+func evaluationWorkerModeFromEnv(key, fallback string) string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+	switch mode {
+	case "", "inline", "external":
+		if mode == "" {
+			return fallback
+		}
+		return mode
+	default:
+		return fallback
 	}
 }
 
