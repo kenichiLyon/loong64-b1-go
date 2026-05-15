@@ -47,5 +47,5 @@ go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4 config ver
 go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4 run
 go test ./...
 GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
-GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade
 ```

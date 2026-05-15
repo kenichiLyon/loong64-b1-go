@@ -7,7 +7,7 @@
 执行环境：
 
 - 主机：`Windows amd64 开发机`
-- 运行方式：`本地 SQLite + Go 主服务 + Python 推理微服务协作链路`
+- 运行方式：`本地 SQLite + Go 主服务 + Python AI Worker 协作链路`
 - 说明：本记录用于证明本地主线闭环已跑通；它不能替代 `LoongArch + 银河麒麟` 目标机验收记录。
 
 ## 1. 执行命令
@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\uat\run-local-uat.ps1 -Port 1
 go test ./...
 npm run build --prefix web
 GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
-GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade
 ```
 
 ## 2. UAT 结果摘要
@@ -80,7 +80,7 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 - `go test ./...`：通过
 - `npm run build --prefix web`：通过
 - `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server`：通过
-- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate`：通过
+- `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade`：通过
 
 ## 5. 本地生成物
 

@@ -5,8 +5,9 @@
 ## 1. 验证范围
 
 - release 二进制与 Web 静态产物完整性
+- Go 二进制内嵌 PC Web 前端
 - systemd 单元安装与服务拉起
-- 数据库迁移与服务启动
+- 系统升级迁移与服务启动
 - `/health/live`、`/health/ready` 健康检查
 - 目标机架构、字体、systemd、数据库与服务状态采样
 
@@ -17,9 +18,8 @@
 ```bash
 sha256sum -c SHA256SUMS
 sudo sh deploy/kylin/scripts/install-systemd.sh
-sudo install -o loong64b1 -g loong64b1 -m 0755 /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64-full /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64
 sh deploy/kylin/scripts/preflight-check.sh
-sudo systemctl start loong64-b1-migrate.service
+sudo systemctl start loong64-b1-upgrade.service
 sudo systemctl enable --now loong64-b1-go.service
 BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/smoke-test.sh
 BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/verify-deployment.sh
@@ -34,14 +34,14 @@ BASE_URL=http://127.0.0.1:8080 sh deploy/kylin/scripts/collect-env.sh /tmp/loong
    - 创建用户、组、目录、unit 文件和 env 模板
 3. `preflight-check.sh`
    - 返回 `Preflight check passed.`
-4. `loong64-b1-migrate.service`
-   - 启动成功，无迁移报错
+4. `loong64-b1-upgrade.service`
+   - 启动成功，无升级迁移报错
 5. `loong64-b1-go.service`
    - `active (running)`
 6. `smoke-test.sh`
    - `/health/live` 和 `/health/ready` 都返回成功
 7. `verify-deployment.sh`
-   - 根路径和健康检查都返回正确 JSON
+   - 根路径返回内嵌 PC Web HTML，健康检查返回正确 JSON
 8. `collect-env.sh`
    - 生成包含系统、版本、systemd、health 输出的记录文件
 

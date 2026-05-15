@@ -2,7 +2,7 @@
 
 本阶段补齐用户、课程、班级、选课、评价模板和实训任务的后端基础闭环，为后续成果上传、核查、评分和报表提供稳定数据边界。
 
-## 1. 数据库迁移
+## 1. 系统升级迁移
 
 新增迁移：`migrations/000002_teaching_domain.sql`
 
@@ -110,5 +110,5 @@ X-Actor-Roles: admin,teacher,student
 ```bash
 go test ./...
 GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
-GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade
 ```
