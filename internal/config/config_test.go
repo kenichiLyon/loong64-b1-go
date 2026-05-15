@@ -123,3 +123,18 @@ func TestLoadFallsBackForInvalidUploadLimitOverrides(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadPrefersAutoUpgradeAndKeepsAutoMigrateFallback(t *testing.T) {
+	t.Setenv("DB_DRIVER", "postgres")
+	t.Setenv("AUTO_UPGRADE", "true")
+	t.Setenv("AUTO_MIGRATE", "false")
+	if cfg := Load(); !cfg.AutoMigrate {
+		t.Fatal("AUTO_UPGRADE should enable automatic system upgrades")
+	}
+
+	t.Setenv("AUTO_UPGRADE", "")
+	t.Setenv("AUTO_MIGRATE", "true")
+	if cfg := Load(); !cfg.AutoMigrate {
+		t.Fatal("AUTO_MIGRATE should remain a compatibility fallback")
+	}
+}

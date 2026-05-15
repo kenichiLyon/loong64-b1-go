@@ -33,10 +33,8 @@
 - 在后端增加 `go:embed`，打包 `web/dist`。
 - `internal/api` 对 `/api`、`/health` 继续走现有路由，其余路径走静态文件或 SPA fallback `index.html`。
 - 开发态保留 `vite dev server` 代理方式；发布态默认使用内嵌前端。
-- CI 增加一类用户向 bundle：
+- CI 只发布一个用户向 bundle：
   - `loong64-b1-go-full-linux-loong64.tar.gz`
-  - `loong64-b1-go-backend-linux-loong64.tar.gz`
-  - `loong64-b1-go-frontend.tar.gz`
 
 验收：
 
@@ -45,11 +43,11 @@
 
 当前实现说明：
 
-- 默认 `go build ./cmd/server` 仍构建纯后端二进制。
+- 默认开发态仍可用 `go run ./cmd/server` 启动 API 服务。
 - 在执行 `npm run build --prefix web` 后，使用 `go build -tags webui ./cmd/server` 可构建内嵌前端的完整二进制。
-- CI 与 Release 现在对外只发布 3 个 bundle，其中 `full` 是主交付，`backend/frontend` 只用于明确需要分离部署的场景。
+- CI 与 Release 对外只发布 `full` bundle。PC Web 前端随 Go 服务二进制内嵌交付。
 
-### 阶段 B：数据库运行时抽象
+### 阶段 B：数据库运行时抽象与系统升级迁移
 
 状态：已完成基础落地
 
@@ -66,8 +64,8 @@
   - `Ping(ctx)`
   - `Close()`
   - `Query/Exec/Begin` 所需最小接口
-- 迁移器拆成方言感知：
-  - `migrations/postgres/*.sql`
+- 升级迁移器拆成方言感知：
+  - `migrations/*.sql`
   - `migrations/sqlite/*.sql`
 - 业务仓储拆成：
   - 共享服务接口
@@ -84,7 +82,8 @@
 - 配置已支持 `DB_DRIVER=sqlite|postgres`、`SQLITE_PATH` 和 `RUNTIME_CONFIG_PATH`。
 - SQLite 模式下服务启动默认执行自动迁移，直接运行二进制即可完成本地初始化。
 - `internal/database` 已支持 PostgreSQL / SQLite 双驱动。
-- `cmd/migrate` 已按驱动选择根迁移目录或 `migrations/sqlite`。
+- `cmd/upgrade` 已按驱动选择根迁移目录或 `migrations/sqlite`。
+- 迁移被视为系统发布/升级能力：`internal/database` 只负责运行时抽象，显式升级由 `cmd/upgrade` 承载，默认 SQLite 启动路径可用 `AUTO_UPGRADE=true` 执行必要迁移。
 - `internal/teaching` 已接入 `SQLiteRepository`，并通过集成测试覆盖管理员建课、教师建任务、学生建提交最小链路。
 - 已提供管理员运行配置 API 与 PC Web 面板，可把数据库运行参数写入 `runtime.json`。
 - 完整的首次启动向导、首个管理员创建引导和无请求头初始化页面仍未完成。

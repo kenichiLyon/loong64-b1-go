@@ -1,5 +1,5 @@
 [Unit]
-Description=python-ai-gateway inference service
+Description=Python AI Worker inference service (current python-ai-gateway)
 Documentation=https://github.com/kenichiLyon/loong64-b1-go
 After=network-online.target
 Wants=network-online.target

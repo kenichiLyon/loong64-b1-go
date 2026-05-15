@@ -12,8 +12,8 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func TestAuthLoginLogoutAndMe(t *testing.T) {
@@ -22,7 +22,7 @@ func TestAuthLoginLogoutAndMe(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "auth-api.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		SessionCookieName: "test_session",
 		CSRFCookieName:    "test_csrf",
@@ -33,8 +33,8 @@ func TestAuthLoginLogoutAndMe(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
@@ -112,7 +112,7 @@ func TestAdminCanSetUserPasswordAndLogin(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "auth-admin.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		SessionCookieName: "test_session",
 		CSRFCookieName:    "test_csrf",
@@ -123,8 +123,8 @@ func TestAdminCanSetUserPasswordAndLogin(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
@@ -240,7 +240,7 @@ func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "auth-csrf.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		SessionCookieName: "test_session",
 		CSRFCookieName:    "test_csrf",
@@ -251,8 +251,8 @@ func TestAuthRejectsMutatingRequestWithoutCSRFFromSession(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
@@ -299,7 +299,7 @@ func TestAuthRejectsMutatingRequestWithCrossOrigin(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "auth-origin.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		SessionCookieName: "test_session",
 		CSRFCookieName:    "test_csrf",
@@ -310,8 +310,8 @@ func TestAuthRejectsMutatingRequestWithCrossOrigin(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
@@ -364,7 +364,7 @@ func TestAuthChangeOwnPasswordRequiresRelogin(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:               "sqlite",
 		SQLitePath:             filepath.Join(t.TempDir(), "auth-self-password.db"),
-		MigrationsDir:          "../../migrations",
+		UpgradeDir:             "../../migrations",
 		RuntimeConfigPath:      filepath.Join(t.TempDir(), "runtime.json"),
 		SessionCookieName:      "test_session",
 		CSRFCookieName:         "test_csrf",
@@ -376,8 +376,8 @@ func TestAuthChangeOwnPasswordRequiresRelogin(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))

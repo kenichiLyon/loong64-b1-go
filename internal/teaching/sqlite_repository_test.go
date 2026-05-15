@@ -6,17 +6,17 @@ import (
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func TestSQLiteServiceSubmissionFlow(t *testing.T) {
 	t.Parallel()
 
 	cfg := config.Config{
-		DBDriver:      "sqlite",
-		SQLitePath:    t.TempDir() + "/teaching.db",
-		MigrationsDir: "../../migrations",
-		ReadyTimeout:  0,
+		DBDriver:     "sqlite",
+		SQLitePath:   t.TempDir() + "/teaching.db",
+		UpgradeDir:   "../../migrations",
+		ReadyTimeout: 0,
 	}
 	pool, err := database.Open(context.Background(), cfg)
 	if err != nil {
@@ -24,9 +24,9 @@ func TestSQLiteServiceSubmissionFlow(t *testing.T) {
 	}
 	defer pool.Close()
 
-	runner := migrate.NewRunner(pool, cfg.MigrationsDir)
+	runner := upgrade.NewRunner(pool, cfg.UpgradeDir)
 	if _, err := runner.Up(context.Background()); err != nil {
-		t.Fatalf("migrate sqlite: %v", err)
+		t.Fatalf("upgrade sqlite: %v", err)
 	}
 
 	repo := NewSQLiteRepository(pool)

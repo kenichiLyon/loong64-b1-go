@@ -72,7 +72,7 @@ jobs:
           - Source commit: ${{ steps.source.outputs.head_sha }}
           - Source workflow run: ${{ steps.source.outputs.run_id }}
           - Primary delivery: loong64-b1-go-full-linux-loong64.tar.gz
-          - Optional split delivery: loong64-b1-go-backend-linux-loong64.tar.gz + loong64-b1-go-frontend.tar.gz
+          - Web UI delivery: embedded in the Go service binary
           - Deployment target: LoongArch + 银河麒麟高级服务器版
 
           Checksums:
@@ -97,8 +97,6 @@ jobs:
           fi
           gh release create "$TAG" \
             release-dist/loong64-b1-go-full-linux-loong64.tar.gz \
-            release-dist/loong64-b1-go-backend-linux-loong64.tar.gz \
-            release-dist/loong64-b1-go-frontend.tar.gz \
             --repo "$GITHUB_REPOSITORY" \
             --target "$HEAD_SHA" \
             --title "Auto Build $TAG" \

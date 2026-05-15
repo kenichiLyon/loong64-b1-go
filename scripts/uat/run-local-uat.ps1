@@ -272,7 +272,7 @@ $job = Start-Job -ScriptBlock {
   $env:SQLITE_PATH = $dbPath
   $env:RUNTIME_CONFIG_PATH = $runtimePath
   $env:STORAGE_ROOT = $storagePath
-  $env:AUTO_MIGRATE = 'true'
+  $env:AUTO_UPGRADE = 'true'
   $env:HTTP_ADDR = "127.0.0.1:$port"
   & (Join-Path $root 'tmp-server.exe') *> $logPath
 } -ArgumentList $repoRoot, $dbPath, $runtimePath, (Join-Path $uatRoot 'storage'), $Port, $logPath

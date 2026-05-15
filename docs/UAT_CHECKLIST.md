@@ -14,7 +14,7 @@ powershell -ExecutionPolicy Bypass -File scripts/uat/run-local-uat.ps1
 
 - 已完成 `go test ./...`
 - 已完成前端构建：`cd web && npm run build`
-- 已完成后端交叉编译：`GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server` 与 `go build ./cmd/migrate`
+- 已完成后端交叉编译：`GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server` 与 `go build ./cmd/upgrade`
 - 目标环境可访问 `/health/live` 与 `/health/ready`
 - 已准备一个干净的测试库或临时数据目录，避免与旧数据混用
 
@@ -198,7 +198,7 @@ CSRF cookie：
 - [ ] `go test ./...` 通过
 - [ ] `npm run build --prefix web` 通过
 - [ ] `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server` 通过
-- [ ] `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate` 通过
+- [ ] `GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade` 通过
 - [ ] 目标机 `/health/live` 与 `/health/ready` 返回正常
 
 建议在目标机记录：

@@ -7,9 +7,9 @@ import (
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/runtimecfg"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func TestBootstrapAssistantCreatesFirstAdmin(t *testing.T) {
@@ -18,7 +18,7 @@ func TestBootstrapAssistantCreatesFirstAdmin(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "assistant.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		AutoMigrate:       true,
 	}
@@ -27,8 +27,8 @@ func TestBootstrapAssistantCreatesFirstAdmin(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(context.Background()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(context.Background()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
 	service := NewService(NewSQLiteRepository(pool), teachingService, runtimecfg.New(cfg.RuntimeConfigPath), cfg, nil, pool, nil)
@@ -73,7 +73,7 @@ func TestDeploymentAssistantSavesRuntimeConfig(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "assistant.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		AutoMigrate:       true,
 	}
@@ -82,8 +82,8 @@ func TestDeploymentAssistantSavesRuntimeConfig(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(context.Background()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(context.Background()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))
 	service := NewService(NewSQLiteRepository(pool), teachingService, runtimecfg.New(cfg.RuntimeConfigPath), cfg, nil, pool, nil)

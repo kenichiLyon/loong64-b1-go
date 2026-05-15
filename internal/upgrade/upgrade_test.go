@@ -1,4 +1,4 @@
-package migrate
+package upgrade
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestLoadDirOrdersSQLMigrationsAndComputesMetadata(t *testing.T) {
+func TestLoadDirOrdersSQLUpgradeStepsAndComputesMetadata(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "000002_second.sql"), []byte("select 2;"), 0o600); err != nil {
 		t.Fatal(err)
@@ -17,17 +17,17 @@ func TestLoadDirOrdersSQLMigrationsAndComputesMetadata(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("ignore"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	migrations, err := LoadDir(dir)
+	steps, err := LoadDir(dir)
 	if err != nil {
 		t.Fatalf("LoadDir failed: %v", err)
 	}
-	if len(migrations) != 2 {
-		t.Fatalf("expected 2 migrations, got %d", len(migrations))
+	if len(steps) != 2 {
+		t.Fatalf("expected 2 upgrade steps, got %d", len(steps))
 	}
-	if migrations[0].Version != "000001" || migrations[0].Name != "first" {
-		t.Fatalf("unexpected first migration: %#v", migrations[0])
+	if steps[0].Scope != ScopeDatabase || steps[0].Version != "000001" || steps[0].Name != "first" {
+		t.Fatalf("unexpected first upgrade step: %#v", steps[0])
 	}
-	if migrations[0].Checksum == "" {
+	if steps[0].Checksum == "" {
 		t.Fatal("checksum should be populated")
 	}
 }

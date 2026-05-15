@@ -27,7 +27,7 @@ type Config struct {
 	LLMModel                  string
 	LLMAPIKey                 string
 	LLMTimeout                time.Duration
-	MigrationsDir             string
+	UpgradeDir                string
 	AutoMigrate               bool
 	DevAuthBypass             bool
 	SessionCookieName         string
@@ -76,7 +76,9 @@ func Load() Config {
 	if fileCfg.AutoMigrate != nil {
 		autoMigrate = *fileCfg.AutoMigrate
 	}
-	if envAutoMigrate, ok := boolFromEnvWithSet("AUTO_MIGRATE"); ok {
+	if envAutoMigrate, ok := boolFromEnvWithSet("AUTO_UPGRADE"); ok {
+		autoMigrate = envAutoMigrate
+	} else if envAutoMigrate, ok := boolFromEnvWithSet("AUTO_MIGRATE"); ok {
 		autoMigrate = envAutoMigrate
 	}
 	return Config{
@@ -96,7 +98,7 @@ func Load() Config {
 		LLMModel:                  getenv("LLM_MODEL", ""),
 		LLMAPIKey:                 getenv("LLM_API_KEY", ""),
 		LLMTimeout:                durationFromEnv("LLM_TIMEOUT", 30*time.Second),
-		MigrationsDir:             getenv("MIGRATIONS_DIR", "migrations"),
+		UpgradeDir:                getenv("UPGRADE_DIR", getenv("MIGRATIONS_DIR", "migrations")),
 		AutoMigrate:               autoMigrate,
 		DevAuthBypass:             boolFromEnv("DEV_AUTH_BYPASS", false),
 		SessionCookieName:         getenv("SESSION_COOKIE_NAME", "loong64_b1_session"),

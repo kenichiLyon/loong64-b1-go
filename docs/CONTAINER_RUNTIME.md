@@ -16,7 +16,7 @@
 - `compose.yaml`：默认 SQLite 服务与可选 PostgreSQL profile
 - `.github/workflows/container-smoke.yml`：在 GitHub Actions 上执行镜像构建与默认 SQLite 启动冒烟
 
-镜像内已包含 `/migrations`，并设置 `MIGRATIONS_DIR=/migrations`，因此默认 SQLite 容器会在启动时自动完成迁移。
+镜像内已包含 `/migrations`，并设置 `UPGRADE_DIR=/migrations`，因此默认 SQLite 容器会在启动时自动完成迁移。
 
 ## 构建
 
@@ -61,7 +61,7 @@ docker compose --profile postgres up --build postgres app-postgres
 - `postgres` 监听宿主机 `5432`
 - `app-postgres` 监听宿主机 `8081`
 - 应用通过 `DATABASE_URL` 连接容器内 PostgreSQL
-- `AUTO_MIGRATE=true`，容器启动时自动迁移
+- `AUTO_UPGRADE=true`，容器启动时自动迁移
 
 ## 环境变量
 
@@ -70,7 +70,7 @@ docker compose --profile postgres up --build postgres app-postgres
 ```env
 DB_DRIVER=sqlite
 SQLITE_PATH=/var/lib/loong64-b1-go/data/loong64-b1-go.db
-AUTO_MIGRATE=true
+AUTO_UPGRADE=true
 STORAGE_ROOT=/var/lib/loong64-b1-go/storage
 RUNTIME_CONFIG_PATH=/var/lib/loong64-b1-go/config/runtime.json
 ```
@@ -80,7 +80,7 @@ PostgreSQL 容器环境：
 ```env
 DB_DRIVER=postgres
 DATABASE_URL=postgres://loong64_b1:loong64_b1_dev@postgres:5432/loong64_b1?sslmode=disable
-AUTO_MIGRATE=true
+AUTO_UPGRADE=true
 ```
 
 ## 限制

@@ -54,9 +54,8 @@ jobs:
       - name: Build release artifacts
         run: |
           mkdir -p dist/raw
-          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-go-linux-loong64 ./cmd/server
           GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -tags webui -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-go-linux-loong64-full ./cmd/server
-          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-migrate-linux-loong64 ./cmd/migrate
+          GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o dist/raw/loong64-b1-upgrade-linux-loong64 ./cmd/upgrade
           bash scripts/release/package-release.sh dist/raw dist/release
 
       - name: Upload build artifacts

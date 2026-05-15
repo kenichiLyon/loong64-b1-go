@@ -22,7 +22,7 @@ require_path "$APP_CONFIG"
 require_path "$APP_STATE"
 require_path "$APP_LOG"
 require_path "/etc/systemd/system/loong64-b1-go.service"
-require_path "/etc/systemd/system/loong64-b1-migrate.service"
+require_path "/etc/systemd/system/loong64-b1-upgrade.service"
 
 if ! getent group "$APP_GROUP" >/dev/null 2>&1; then
   echo "missing group: $APP_GROUP" >&2

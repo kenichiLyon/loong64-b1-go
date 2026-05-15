@@ -11,7 +11,7 @@ $env:POSTGRES_SUPERUSER_URL='postgres://postgres:postgres@127.0.0.1:5432/postgre
 .\scripts\dev\postgres-init.ps1
 $env:DB_DRIVER='postgres'
 $env:DATABASE_URL='postgres://loong64_b1:loong64_b1_dev@127.0.0.1:5432/loong64_b1?sslmode=disable'
-go run ./cmd/migrate up
+go run ./cmd/upgrade up
 go run ./cmd/server
 ```
 
@@ -29,7 +29,7 @@ POSTGRES_SUPERUSER_URL='postgres://postgres:postgres@127.0.0.1:5432/postgres?ssl
 
 export DB_DRIVER='postgres'
 export DATABASE_URL='postgres://loong64_b1:loong64_b1_dev@127.0.0.1:5432/loong64_b1?sslmode=disable'
-go run ./cmd/migrate up
+go run ./cmd/upgrade up
 go run ./cmd/server
 ```
 

@@ -1,7 +1,7 @@
 # loong64-b1-go
 
 基于大模型技术的软件实训教学结果检查评价与报表系统。  
-当前仓库面向 `LoongArch + 银河麒麟高级服务器版` 交付，采用 `Go 主服务 + Python 推理微服务` 的双服务架构。
+当前仓库面向 `LoongArch + 银河麒麟高级服务器版` 交付，采用 `Go 主服务 + Python AI Worker` 的双服务架构。当前 AI Worker 实现仍位于 `python-ai-gateway/`，systemd 单元名暂保留 `python-ai-gateway.service`；Go 主服务默认内嵌 PC Web 前端。
 
 ## 目标
 
@@ -33,12 +33,11 @@
 
 ## 当前架构
 
-系统由 4 类核心组件组成：
+系统由 3 类核心组件组成：
 
-1. `Web 前端`
-2. `Go 主服务`
-3. `Python 推理微服务`
-4. `数据库 / 对象存储 / 模型服务`
+1. `Go 主服务（内嵌 PC Web 前端）`
+2. `Python AI Worker（当前 python-ai-gateway）`
+3. `数据库 / 对象存储 / 模型服务`
 
 职责边界：
 
@@ -48,7 +47,8 @@
   - 教学业务流程
   - 数据库和对象存储写入
   - 报表与导出
-- `Python 推理微服务`
+  - PC Web 静态文件和 SPA fallback
+- `Python AI Worker`
   - `parse-artifact`
   - `evaluate-submission`
   - `build-retrieval-index`
@@ -59,7 +59,7 @@
 一句话：
 
 - `Go 管业务`
-- `Python 管推理`
+- `Python AI Worker 管推理`
 
 ## 快速启动
 
@@ -79,10 +79,10 @@ go run ./cmd/server
 RUNTIME_CONFIG_PATH=./config/runtime.json
 DB_DRIVER=sqlite
 SQLITE_PATH=./data/loong64-b1-go.db
-AUTO_MIGRATE=true
+AUTO_UPGRADE=true
 ```
 
-### 启动 Python 推理微服务
+### 启动 Python AI Worker
 
 Linux / macOS：
 
@@ -104,7 +104,7 @@ pip install -r requirements.txt
 uvicorn ai_gateway.app:app --host 127.0.0.1 --port 8081
 ```
 
-Go 侧启用 Python 微服务时，至少配置：
+Go 侧启用 Python AI Worker 时，至少配置：
 
 ```bash
 AI_GATEWAY_BASE_URL=http://127.0.0.1:8081
@@ -127,18 +127,29 @@ npm run build
 
 开发服务器默认代理 `/api` 和 `/health` 到 `http://127.0.0.1:8080`。
 
-## 数据库迁移
+构建内嵌前端的完整 Go 服务：
+
+```bash
+npm run build --prefix web
+go build -tags webui -o bin/loong64-b1-go ./cmd/server
+```
+
+随后直接运行该二进制并打开 `http://127.0.0.1:8080`。
+
+## 系统升级迁移
+
+迁移是发布和升级能力的一部分，不是数据库包的附属操作。默认 SQLite 路径可通过 `AUTO_UPGRADE=true` 在服务启动时自动执行必要迁移；需要运维显式控制时，使用独立 `cmd/upgrade` 命令。
 
 SQLite：
 
 ```bash
-DB_DRIVER=sqlite SQLITE_PATH=./data/loong64-b1-go.db go run ./cmd/migrate up
+DB_DRIVER=sqlite SQLITE_PATH=./data/loong64-b1-go.db go run ./cmd/upgrade up
 ```
 
 PostgreSQL：
 
 ```bash
-DB_DRIVER=postgres DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/migrate up
+DB_DRIVER=postgres DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/upgrade up
 ```
 
 ## 验证
@@ -146,8 +157,8 @@ DB_DRIVER=postgres DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loon
 ```bash
 go test ./...
 npm run build --prefix web
-GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/server
-GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build -tags webui ./cmd/server
+GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade
 ```
 
 ## 认证与教学 API
@@ -178,7 +189,7 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 1. `loong64-b1-go.service`
 2. `python-ai-gateway.service`
 
-如果不启用 Python 微服务，Go 侧仍可保留部分回退能力；但当前推荐路径已经是双服务协作。
+其中 `python-ai-gateway.service` 是当前 AI Worker 的兼容服务名。若不启用 AI Worker，Go 侧仍可保留部分回退能力；但当前推荐路径已经是双服务协作。
 
 ## 关键文档
 
@@ -189,7 +200,7 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 - 本地 UAT 记录：`docs/UAT_LOCAL_RESULTS.md`
 - 安全与会话验证记录：`docs/SECURITY_VALIDATION_RESULTS.md`
 - 银河麒麟部署：`docs/DEPLOY_KYLIN.md`
-- Python 微服务：`docs/PYTHON_AI_MIDDLEWARE.md`
+- Python AI Worker：`docs/PYTHON_AI_MIDDLEWARE.md`
 - Stage 7 部署验证：`docs/STAGE7_DEPLOYMENT_VERIFICATION.md`
 - 容器次级交付：`docs/CONTAINER_RUNTIME.md`
 - 默认 SQLite / PostgreSQL 运行方案：`docs/SINGLE_BINARY_RUNTIME.md`
@@ -201,9 +212,9 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/migrate
 cmd/                   Go 入口
 internal/              后端内部模块
 api/                   OpenAPI
-migrations/            数据库迁移
+migrations/            系统升级迁移 SQL
 web/                   PC Web 前端
-python-ai-gateway/     Python 推理微服务
+python-ai-gateway/     Python AI Worker 当前实现
 deploy/kylin/          银河麒麟部署脚本和 systemd 文件
 docs/                  架构、安全、兼容性和交付文档
 ```

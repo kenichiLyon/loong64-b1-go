@@ -13,6 +13,7 @@ import type {
   ExperimentReportSummary,
   ExperimentRecord,
   EvaluationResultDetail,
+  EvaluationJob,
   MetricRecord,
   ReportExport,
   RubricTemplateRecord,
@@ -270,12 +271,16 @@ export class APIClient {
     return this.request(`/api/v1/teacher/experiments/${encodeURIComponent(experimentID)}/submissions`, options);
   }
 
-  async createEvaluation(submissionID: string, mode: 'rule_only' | 'rule_and_llm', options: RequestOptions): Promise<EvaluationResultDetail> {
+  async createEvaluation(submissionID: string, mode: 'rule_only' | 'rule_and_llm', options: RequestOptions): Promise<EvaluationJob> {
     return this.request(`/api/v1/teacher/submissions/${encodeURIComponent(submissionID)}/evaluations/initial`, {
       ...options,
       method: 'POST',
       body: JSON.stringify({ mode }),
     });
+  }
+
+  async getEvaluationJob(jobID: string, options: RequestOptions): Promise<EvaluationJob> {
+    return this.request(`/api/v1/teacher/evaluations/jobs/${encodeURIComponent(jobID)}`, options);
   }
 
   async getLatestEvaluation(submissionID: string, options: RequestOptions): Promise<EvaluationResultDetail> {

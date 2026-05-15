@@ -122,6 +122,29 @@ type CreateInitialEvaluationInput struct {
 	Force bool   `json:"force,omitempty"`
 }
 
+type EvaluationJobStatus string
+
+const (
+	EvaluationJobQueued    EvaluationJobStatus = "queued"
+	EvaluationJobRunning   EvaluationJobStatus = "running"
+	EvaluationJobSucceeded EvaluationJobStatus = "succeeded"
+	EvaluationJobFailed    EvaluationJobStatus = "failed"
+)
+
+type EvaluationJob struct {
+	ID           string                       `json:"id"`
+	SubmissionID string                       `json:"submission_id"`
+	ActorID      string                       `json:"actor_id"`
+	Status       EvaluationJobStatus          `json:"status"`
+	Input        CreateInitialEvaluationInput `json:"input"`
+	Result       *EvaluationResultDetail      `json:"result,omitempty"`
+	Error        string                       `json:"error,omitempty"`
+	CreatedAt    time.Time                    `json:"created_at"`
+	StartedAt    *time.Time                   `json:"started_at,omitempty"`
+	FinishedAt   *time.Time                   `json:"finished_at,omitempty"`
+	UpdatedAt    time.Time                    `json:"updated_at"`
+}
+
 type SubmissionSpec struct {
 	RequiredArtifacts []string `json:"required_artifacts"`
 	RequiredSections  []string `json:"required_sections"`

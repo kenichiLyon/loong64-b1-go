@@ -10,8 +10,8 @@ import (
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func TestLoginResolveAndLogout(t *testing.T) {
@@ -198,7 +198,7 @@ func newSQLiteAuthService(t *testing.T, dbName string) (config.Config, *database
 	cfg := config.Config{
 		DBDriver:               "sqlite",
 		SQLitePath:             filepath.Join(t.TempDir(), dbName),
-		MigrationsDir:          "../../migrations",
+		UpgradeDir:             "../../migrations",
 		SessionCookieName:      "test_session",
 		CSRFCookieName:         "test_csrf",
 		SessionTTL:             24 * time.Hour,
@@ -208,8 +208,8 @@ func newSQLiteAuthService(t *testing.T, dbName string) (config.Config, *database
 	if err != nil {
 		t.Fatalf("open sqlite: %v", err)
 	}
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(context.Background()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(context.Background()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 
 	teachingService := teaching.NewService(teaching.NewSQLiteRepository(pool))

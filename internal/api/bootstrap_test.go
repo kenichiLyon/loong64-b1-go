@@ -12,8 +12,8 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/authn"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 	cfg := config.Config{
 		DBDriver:          "sqlite",
 		SQLitePath:        filepath.Join(t.TempDir(), "bootstrap.db"),
-		MigrationsDir:     "../../migrations",
+		UpgradeDir:        "../../migrations",
 		RuntimeConfigPath: filepath.Join(t.TempDir(), "runtime.json"),
 		AutoMigrate:       true,
 		SessionCookieName: "test_session",
@@ -33,8 +33,8 @@ func TestBootstrapStatusAndCreateAdmin(t *testing.T) {
 		t.Fatalf("open sqlite: %v", err)
 	}
 	defer pool.Close()
-	if _, err := migrate.NewRunner(pool, cfg.MigrationsDir).Up(t.Context()); err != nil {
-		t.Fatalf("migrate: %v", err)
+	if _, err := upgrade.NewRunner(pool, cfg.UpgradeDir).Up(t.Context()); err != nil {
+		t.Fatalf("upgrade: %v", err)
 	}
 	service := teaching.NewService(teaching.NewSQLiteRepository(pool))
 	authService := authn.NewService(authn.NewSQLiteRepository(pool), cfg)

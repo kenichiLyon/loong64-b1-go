@@ -13,7 +13,7 @@ import RuntimeConfigPanel from './components/RuntimeConfigPanel.vue';
 import SubmissionDetailPanel from './components/SubmissionDetailPanel.vue';
 import TeacherSetupPanel from './components/TeacherSetupPanel.vue';
 import { api } from './lib/api';
-import type { ActorProfile, ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, ClassRecord, CourseRecord, CourseReportSummary, EvaluationResultDetail, ExperimentRecord, ExperimentReportSummary, ReportExport, RubricTemplateRecord, RubricVersionRecord, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
+import type { ActorProfile, ActorRole, AssistantConversationDetail, AssistantToolCall, BootstrapStatus, ClassRecord, CourseRecord, CourseReportSummary, EvaluationJob, EvaluationResultDetail, ExperimentRecord, ExperimentReportSummary, ReportExport, RubricTemplateRecord, RubricVersionRecord, RuntimeConfigSummary, Submission, SubmissionDetail, SubmissionReport, TeacherReviewDetail } from './lib/types';
 import './styles.css';
 
 const actorID = ref('teacher-1');
@@ -32,6 +32,7 @@ const message = ref('准备就绪');
 const submissions = ref<Submission[]>([]);
 const detail = ref<SubmissionDetail | null>(null);
 const evaluation = ref<EvaluationResultDetail | null>(null);
+const evaluationJob = ref<EvaluationJob | null>(null);
 const review = ref<TeacherReviewDetail | null>(null);
 const report = ref<SubmissionReport | null>(null);
 const summary = ref<ExperimentReportSummary | null>(null);
@@ -66,6 +67,10 @@ async function runAction(label: string, action: () => Promise<void>) {
   } finally {
     busy.value = false;
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 async function createSubmission() {
@@ -237,8 +242,29 @@ async function loadStudentSubmissions() {
 
 async function runEvaluation() {
   await runAction('运行智能核查', async () => {
-    evaluation.value = await api.createEvaluation(submissionID.value, mode.evaluation, requestOptions.value);
+    evaluationJob.value = await api.createEvaluation(submissionID.value, mode.evaluation, requestOptions.value);
+    message.value = `初评任务已排队：${evaluationJob.value.id}`;
+    await pollEvaluationJob(evaluationJob.value.id);
   });
+}
+
+async function pollEvaluationJob(jobID: string) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await sleep(1000);
+    const job = await api.getEvaluationJob(jobID, requestOptions.value);
+    evaluationJob.value = job;
+    message.value = `初评任务 ${job.status}`;
+    if (job.status === 'succeeded') {
+      if (job.result) {
+        evaluation.value = job.result;
+      }
+      return;
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.error || '初评任务失败');
+    }
+  }
+  message.value = '初评任务仍在运行，可稍后读取最新初评';
 }
 
 async function loadEvaluation() {

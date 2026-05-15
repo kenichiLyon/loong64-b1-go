@@ -34,6 +34,36 @@ func TestCreateInitialEvaluationRuleOnly(t *testing.T) {
 	}
 }
 
+func TestSubmitInitialEvaluationJobRunsAsynchronously(t *testing.T) {
+	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
+	if err != nil {
+		t.Fatal(err)
+	}
+	service := NewService(&fakeRepo{teacherAllowed: true, evaluationContext: validEvaluationContext()}, WithEvaluationWorkerLimit(1))
+	job, err := service.SubmitInitialEvaluationJob(context.Background(), actor, "submission-1", CreateInitialEvaluationInput{Mode: RuleOnlyMode}, AuditEntry{})
+	if err != nil {
+		t.Fatalf("SubmitInitialEvaluationJob should succeed: %v", err)
+	}
+	if job.Status != EvaluationJobQueued {
+		t.Fatalf("expected queued job, got %+v", job)
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		loaded, err := service.GetEvaluationJob(context.Background(), actor, job.ID)
+		if err != nil {
+			t.Fatalf("GetEvaluationJob failed: %v", err)
+		}
+		if loaded.Status == EvaluationJobSucceeded {
+			if loaded.Result == nil || loaded.Result.Result.SubmissionID != "submission-1" {
+				t.Fatalf("unexpected job result: %+v", loaded)
+			}
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("evaluation job did not complete before deadline")
+}
+
 func TestCreateInitialEvaluationRequiresTeacherAccess(t *testing.T) {
 	actor, err := NewActor("teacher-1", []Role{RoleTeacher})
 	if err != nil {

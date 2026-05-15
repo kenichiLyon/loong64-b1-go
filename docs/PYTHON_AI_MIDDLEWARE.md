@@ -1,6 +1,6 @@
-# Python 推理微服务
+# Python AI Worker（当前 python-ai-gateway）
 
-本文件说明当前项目里的 Python 服务负责什么、如何本地调试，以及为什么它是正式组成部分而不是临时脚本。
+本文件说明当前项目里的 Python AI Worker 负责什么、如何本地调试，以及为什么它是正式组成部分而不是临时脚本。当前目录、包名、环境变量前缀和 systemd 单元仍沿用 `python-ai-gateway` 兼容命名；后续升级应向更通用的 AI Worker 形态收敛。
 
 ## 1. 为什么引入 Python
 
@@ -26,11 +26,11 @@ Go 主服务继续负责：
 一句话：
 
 - `Go 管业务`
-- `Python 管推理`
+- `Python AI Worker 管推理`
 
 ## 2. 当前职责
 
-Python 微服务当前提供这些内部接口：
+Python AI Worker 当前提供这些内部接口：
 
 - `GET /health/live`
 - `GET /health/ready`
@@ -57,6 +57,8 @@ Python 微服务当前提供这些内部接口：
 - 本地模型运维自动化
 
 ## 3. 当前目录
+
+当前实现仍放在 `python-ai-gateway/` 下，暂不在部署文档中改名，以避免服务名和发布包路径漂移：
 
 - `python-ai-gateway/ai_gateway/app.py`
 - `python-ai-gateway/ai_gateway/models.py`
@@ -134,8 +136,8 @@ AI_GATEWAY_LLM_TIMEOUT=30
 
 当 `AI_GATEWAY_BASE_URL` 被配置时，Go 会：
 
-- 在 readiness 检查中纳入 Python 服务
-- 优先把解析和初评交给 Python 微服务
+- 在 readiness 检查中纳入 Python AI Worker
+- 优先把解析和初评交给 Python AI Worker
 - 必要时回退到 Go 侧已有能力
 
 ## 7. 部署建议
@@ -144,6 +146,8 @@ AI_GATEWAY_LLM_TIMEOUT=30
 
 1. `loong64-b1-go.service`
 2. `python-ai-gateway.service`
+
+服务名暂时保留 `python-ai-gateway.service`，语义上按 AI Worker 维护。
 
 部署建议：
 
@@ -167,8 +171,8 @@ AI_GATEWAY_LLM_TIMEOUT=30
 
 ## 9. 当前结论
 
-现在这套 Python 服务不是可选实验脚本，而是：
+现在这套 Python AI Worker 不是可选实验脚本，而是：
 
 - `项目 AI 能力层的正式组成部分`
 
-后续所有本地模型、检索、RAG、解析增强，优先都应沿这条线继续演进，而不是重新塞回 Go 主服务。
+后续所有本地模型、检索、RAG、解析增强，优先都应沿 AI Worker 线继续演进，而不是重新塞回 Go 主服务。

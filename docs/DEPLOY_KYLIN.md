@@ -8,20 +8,18 @@
 也就是：
 
 - `Go 主服务`
-- `Python 推理微服务`
+- `Python AI Worker`
 
 共同组成正式交付。
+
+Go 主服务二进制默认内嵌 `web/dist`，浏览器直接访问 Go 服务即可使用 PC Web UI。部署链路不再提供前后端拆分发布包。
+`python-ai-gateway.service` 是当前 AI Worker 的兼容服务名，后续服务形态升级时应优先按 AI Worker 边界演进，而不是把 AI 能力塞回 Go 主服务。
 
 ## 1. 发布产物
 
 优先使用：
 
 - `loong64-b1-go-full-linux-loong64.tar.gz`
-
-如需拆分部署，也可以使用：
-
-- `loong64-b1-go-backend-linux-loong64.tar.gz`
-- `loong64-b1-go-frontend.tar.gz`
 
 部署前建议先校验：
 
@@ -53,7 +51,7 @@ sudo sh deploy/kylin/scripts/install-systemd.sh
 
 - 用户：`loong64b1`
 - `loong64-b1-go.service`
-- `loong64-b1-migrate.service`
+- `loong64-b1-upgrade.service`
 - `python-ai-gateway.service`
 - `/etc/loong64-b1-go/loong64-b1-go.env`
 - `/etc/loong64-b1-go/python-ai-gateway.env`
@@ -63,12 +61,12 @@ sudo sh deploy/kylin/scripts/install-systemd.sh
 ```bash
 sudo install -d -m 0755 /opt/loong64-b1-go
 sudo tar -xzf loong64-b1-go-full-linux-loong64.tar.gz -C /opt/loong64-b1-go
-sudo install -o loong64b1 -g loong64b1 -m 0755 /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64-full /opt/loong64-b1-go/bin/loong64-b1-go-linux-loong64
+sudo chown -R loong64b1:loong64b1 /opt/loong64-b1-go
 ```
 
-## 5. 部署 Python 推理微服务
+## 5. 部署 Python AI Worker
 
-推荐将仓库中的 `python-ai-gateway/` 同步到：
+当前实现目录仍是 `python-ai-gateway/`，推荐同步到：
 
 ```text
 /opt/loong64-b1-go/python-ai-gateway
@@ -116,7 +114,7 @@ DB_DRIVER=postgres
 DATABASE_URL=postgres://loong64_b1:CHANGE_ME@127.0.0.1:5432/loong64_b1?sslmode=disable
 ```
 
-## 7. Python 环境变量
+## 7. AI Worker 环境变量
 
 编辑：
 
@@ -148,7 +146,7 @@ AI_GATEWAY_LLM_MODEL=gpt-compatible-model
 
 ```bash
 sudo systemctl enable --now python-ai-gateway.service
-sudo systemctl start loong64-b1-migrate.service
+sudo systemctl start loong64-b1-upgrade.service
 sudo systemctl enable --now loong64-b1-go.service
 ```
 
@@ -163,18 +161,13 @@ curl http://127.0.0.1:8080/health/ready
 
 ## 9. 前端托管
 
-如果使用 full bundle：
+Go 主服务直接托管 PC Web 前端：
 
-- Go 主服务直接托管前端
+- `/api` 和 `/health` 仍由 Go 后端接口处理
+- 其他浏览器路由走内嵌静态文件和 SPA fallback
+- 默认监听 `HTTP_ADDR`，示例为 `0.0.0.0:8080`
 
-如果使用分离部署：
-
-- 使用 Nginx / 学校统一网关托管静态资源
-- `/api` 和 `/health` 反代到 Go 主服务
-
-示例见：
-
-- `deploy/kylin/nginx/loong64-b1-go.conf.example`
+如果学校统一入口需要 80/443、TLS 或统一域名，应在网关层单独评审和配置，不作为本项目默认交付依赖。
 
 ## 10. 验收留档
 

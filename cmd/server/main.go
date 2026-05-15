@@ -12,8 +12,8 @@ import (
 	"github.com/kenichiLyon/loong64-b1-go/internal/api"
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
 	"github.com/kenichiLyon/loong64-b1-go/internal/storage"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func main() {
@@ -45,13 +45,13 @@ func main() {
 		}
 		defer db.Close()
 		if cfg.AutoMigrate {
-			runner := migrate.NewRunner(db, cfg.MigrationsDir)
+			runner := upgrade.NewRunner(db, cfg.UpgradeDir)
 			applied, err := runner.Up(ctx)
 			if err != nil {
-				logger.Error("automatic migration failed", "error", err)
+				logger.Error("automatic system upgrade failed", "error", err)
 				os.Exit(1)
 			}
-			logger.Info("automatic migration completed", "applied", len(applied), "driver", db.Driver())
+			logger.Info("automatic system upgrade completed", "applied", len(applied), "driver", db.Driver())
 		}
 	} else {
 		logger.Warn("database is not configured; readiness check will report database as failed")
