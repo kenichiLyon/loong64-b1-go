@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 )
@@ -325,6 +326,8 @@ type fakeRepo struct {
 	latestEvaluation                  EvaluationResultDetail
 	evaluationResultSubmissionID      string
 	createdEvaluation                 EvaluationResultDetail
+	evaluationJobsMu                  sync.Mutex
+	evaluationJobs                    map[string]EvaluationJob
 	teacherReview                     TeacherReviewDetail
 	publishedReview                   TeacherReviewDetail
 	lastGetTeacherReviewPublishedOnly bool
@@ -484,6 +487,96 @@ func (f *fakeRepo) GetLatestEvaluation(_ context.Context, submissionID string) (
 		return item.evaluation, nil
 	}
 	return f.latestEvaluation, nil
+}
+func (f *fakeRepo) CreateEvaluationJob(_ context.Context, job EvaluationJob, _ AuditEntry) (EvaluationJob, error) {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	if f.evaluationJobs == nil {
+		f.evaluationJobs = map[string]EvaluationJob{}
+	}
+	now := time.Now().UTC()
+	if job.CreatedAt.IsZero() {
+		job.CreatedAt = now
+	}
+	if job.UpdatedAt.IsZero() {
+		job.UpdatedAt = job.CreatedAt
+	}
+	f.evaluationJobs[job.ID] = cloneEvaluationJob(job)
+	return cloneEvaluationJob(job), nil
+}
+func (f *fakeRepo) GetEvaluationJob(_ context.Context, jobID string) (EvaluationJob, error) {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	job, ok := f.evaluationJobs[jobID]
+	if !ok {
+		return EvaluationJob{}, notFoundError("evaluation job not found")
+	}
+	return cloneEvaluationJob(job), nil
+}
+func (f *fakeRepo) MarkEvaluationJobRunning(_ context.Context, jobID string) (EvaluationJob, error) {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	job, ok := f.evaluationJobs[jobID]
+	if !ok {
+		return EvaluationJob{}, notFoundError("evaluation job not found")
+	}
+	if job.Status != EvaluationJobQueued {
+		return EvaluationJob{}, conflictError("evaluation job is not queued")
+	}
+	now := time.Now().UTC()
+	job.Status = EvaluationJobRunning
+	job.StartedAt = &now
+	job.UpdatedAt = now
+	f.evaluationJobs[jobID] = cloneEvaluationJob(job)
+	return cloneEvaluationJob(job), nil
+}
+func (f *fakeRepo) ClaimNextEvaluationJob(context.Context) (EvaluationJob, error) {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	for jobID, job := range f.evaluationJobs {
+		if job.Status != EvaluationJobQueued {
+			continue
+		}
+		now := time.Now().UTC()
+		job.Status = EvaluationJobRunning
+		job.StartedAt = &now
+		job.UpdatedAt = now
+		f.evaluationJobs[jobID] = cloneEvaluationJob(job)
+		return cloneEvaluationJob(job), nil
+	}
+	return EvaluationJob{}, notFoundError("evaluation job not found")
+}
+func (f *fakeRepo) CompleteEvaluationJob(_ context.Context, jobID string, detail EvaluationResultDetail) error {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	job, ok := f.evaluationJobs[jobID]
+	if !ok {
+		return notFoundError("evaluation job not found")
+	}
+	now := time.Now().UTC()
+	result := cloneEvaluationResultDetail(detail)
+	job.Status = EvaluationJobSucceeded
+	job.Result = &result
+	job.Error = ""
+	job.FinishedAt = &now
+	job.UpdatedAt = now
+	f.evaluationJobs[jobID] = cloneEvaluationJob(job)
+	return nil
+}
+func (f *fakeRepo) FailEvaluationJob(_ context.Context, jobID string, message string) error {
+	f.evaluationJobsMu.Lock()
+	defer f.evaluationJobsMu.Unlock()
+	job, ok := f.evaluationJobs[jobID]
+	if !ok {
+		return notFoundError("evaluation job not found")
+	}
+	now := time.Now().UTC()
+	job.Status = EvaluationJobFailed
+	job.Error = message
+	job.FinishedAt = &now
+	job.UpdatedAt = now
+	f.evaluationJobs[jobID] = cloneEvaluationJob(job)
+	return nil
 }
 func (f *fakeRepo) EvaluationResultSubmissionID(context.Context, string) (string, error) {
 	if f.evaluationResultSubmissionID != "" {

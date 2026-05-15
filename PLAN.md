@@ -83,7 +83,8 @@ Python 是 AI 任务执行层，负责：
 - 规则核查、AI 初评、教师复核、最终发布
 - 学生查看已发布评价
 - HTML / CSV / XLSX / PDF 报表导出
-- Python 微服务解析、同步初评、检索和细粒度 evidence refs
+- Go 侧初评 job 入队、数据库状态轮询、结果落库和并发 worker 限流
+- Python 微服务解析、当前同步初评适配、检索和细粒度 evidence refs
 - 教师前端对 AI evidence 的多处可视化：
   - 详情页
   - 初评页
@@ -98,7 +99,7 @@ Python 是 AI 任务执行层，负责：
 
 - 当前部署和调试体验仍被 nginx / split frontend 路径干扰，需要收口为 appembed 单入口
 - 数据库访问层手写 SQL 和扫描代码过重，需要引入 sqlc 收敛生产主路径
-- AI 初评仍依赖同步 HTTP 调用，不适合多学生并发场景
+- Python AI Worker 尚未完全升级为独立异步执行层，Go 侧已具备初评 job queue / 状态轮询 / 结果落库
 - UAT 记录还没有正式完成留档
 - LoongArch / 银河麒麟目标机部署验收记录还没有正式完成
 - 交付文档曾出现重复与失真，需要持续保持一致
@@ -149,10 +150,10 @@ Python 是 AI 任务执行层，负责：
    - 设计查询时必须考虑多用户并发、锁等待、事务粒度、幂等和冲突处理
    - SQLite 定位为本地调试 / 比赛演示模式，不承诺承担校园级正式并发
 3. `Python gateway 升级为异步 AI Worker`
-   - 不再依赖同步 HTTP 请求完成初评
-   - Go 创建 job，前端通过状态轮询查看进度和结果
+   - Go 已创建初评 job，并支持数据库状态轮询、结果落库和本进程 worker 并发限流
+   - 下一步不再依赖 Go worker 内同步调用 Python HTTP 完成初评
    - Python worker 拉取或接收任务并异步执行
-   - 初评、解析、检索等 AI 重任务必须进入 job queue
+   - 初评、解析、检索等 AI 重任务必须统一进入 job queue
    - worker 必须支持并发限流、超时、重试、失败状态和可观测日志
    - 多学生并发时，任务上下文以 `job_id`、`submission_id`、`actor_id`、`conversation_id` 等显式字段隔离
 
@@ -197,10 +198,10 @@ Python 是 AI 任务执行层，负责：
    - 再迁移 PostgreSQL 主路径的高频查询
    - 保持事务、锁和并发语义可审计
 3. 将 Python gateway 改造为异步 AI Worker：
-   - 设计 job 状态机
+   - 复用并扩展 Go 侧已有 job 状态机
    - 设计 Go 与 Python 的任务协议
-   - 接入状态轮询和并发限流
-   - 把初评从同步 HTTP 改成异步任务
+   - 将 Python 侧执行从同步 HTTP 适配升级为异步 job worker
+   - 将解析、检索等 AI 重任务统一接入状态轮询和并发限流
 4. 收口并保持交付文档一致：
    - `README.md`
    - `PLAN.md`
@@ -269,11 +270,11 @@ Python 是 AI 任务执行层，负责：
 - 每一步保留并发、事务和锁语义说明
 - 迁移期间不改变业务行为
 
-### 8.4 同步 AI 初评压垮并发
+### 8.4 Python 同步适配层压垮并发
 
 风险：
 
-- 多学生同时提交或教师批量初评时，请求堆积、超时或模型服务过载
+- 多学生同时提交或教师批量初评时，Go 侧 job queue 可以缓冲，但 Python 侧同步 HTTP 适配仍可能超时或压垮模型服务
 
 处理：
 

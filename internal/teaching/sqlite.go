@@ -1351,6 +1351,131 @@ ORDER BY source, metric_code`, detail.Result.ID)
 	return detail, nil
 }
 
+func (r *SQLiteRepository) CreateEvaluationJob(ctx context.Context, job EvaluationJob, audit AuditEntry) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	tx, err := pool.BeginTx(ctx, sql.TxOptions{})
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	defer sqliteRollback(ctx, tx)
+	if err := sqliteScanEvaluationJob(tx.QueryRow(ctx, `
+INSERT INTO jobs (id, job_type, status, payload)
+VALUES ($1, $2, $3, $4)
+RETURNING id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at`,
+		job.ID, InitialEvaluationJobType, string(job.Status), marshalEvaluationJobPayload(job)), &job); err != nil {
+		return EvaluationJob{}, sqliteMapDBError(err)
+	}
+	if err := sqliteInsertAudit(ctx, tx, audit); err != nil {
+		return EvaluationJob{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return EvaluationJob{}, err
+	}
+	return job, nil
+}
+
+func (r *SQLiteRepository) GetEvaluationJob(ctx context.Context, jobID string) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := sqliteScanEvaluationJob(pool.QueryRow(ctx, `
+SELECT id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at
+FROM jobs
+WHERE id = $1 AND job_type = $2`, jobID, InitialEvaluationJobType), &job); err != nil {
+		return EvaluationJob{}, sqliteMapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *SQLiteRepository) MarkEvaluationJobRunning(ctx context.Context, jobID string) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := sqliteScanEvaluationJob(pool.QueryRow(ctx, `
+UPDATE jobs
+SET status = $3, attempts = attempts + 1, started_at = COALESCE(started_at, now()), updated_at = now()
+WHERE id = $1 AND job_type = $2 AND status = $4
+RETURNING id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobRunning), string(EvaluationJobQueued)), &job); err != nil {
+		return EvaluationJob{}, sqliteMapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *SQLiteRepository) ClaimNextEvaluationJob(ctx context.Context) (EvaluationJob, error) {
+	pool, err := r.pool()
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	var job EvaluationJob
+	if err := sqliteScanEvaluationJob(pool.QueryRow(ctx, `
+WITH next_job AS (
+  SELECT id
+  FROM jobs
+  WHERE job_type = $1 AND status = $2 AND run_after <= now()
+  ORDER BY run_after, created_at
+  LIMIT 1
+)
+UPDATE jobs
+SET status = $3, attempts = attempts + 1, started_at = COALESCE(started_at, now()), updated_at = now()
+WHERE id IN (SELECT id FROM next_job)
+RETURNING id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at`,
+		InitialEvaluationJobType, string(EvaluationJobQueued), string(EvaluationJobRunning)), &job); err != nil {
+		return EvaluationJob{}, sqliteMapDBError(err)
+	}
+	return job, nil
+}
+
+func (r *SQLiteRepository) CompleteEvaluationJob(ctx context.Context, jobID string, detail EvaluationResultDetail) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	tx, err := pool.BeginTx(ctx, sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer sqliteRollback(ctx, tx)
+	job, err := sqliteLoadEvaluationJobForUpdate(ctx, tx, jobID)
+	if err != nil {
+		return err
+	}
+	result := cloneEvaluationResultDetail(detail)
+	job.Result = &result
+	if _, err := tx.Exec(ctx, `
+UPDATE jobs
+SET status = $3, payload = $4, error = NULL, finished_at = now(), updated_at = now()
+WHERE id = $1 AND job_type = $2`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobSucceeded), marshalEvaluationJobPayload(job)); err != nil {
+		return sqliteMapDBError(err)
+	}
+	return tx.Commit(ctx)
+}
+
+func (r *SQLiteRepository) FailEvaluationJob(ctx context.Context, jobID string, message string) error {
+	pool, err := r.pool()
+	if err != nil {
+		return err
+	}
+	var updatedID string
+	if err := pool.QueryRow(ctx, `
+UPDATE jobs
+SET status = $3, error = $4, finished_at = now(), updated_at = now()
+WHERE id = $1 AND job_type = $2
+RETURNING id`,
+		jobID, InitialEvaluationJobType, string(EvaluationJobFailed), message).Scan(&updatedID); err != nil {
+		return sqliteMapDBError(err)
+	}
+	return nil
+}
+
 func (r *SQLiteRepository) EvaluationResultSubmissionID(ctx context.Context, evaluationResultID string) (string, error) {
 	pool, err := r.pool()
 	if err != nil {
@@ -1716,6 +1841,33 @@ func sqliteScanEvaluationResult(row sqliteScanner, result *EvaluationResult) err
 	result.Status = EvaluationStatus(status)
 	result.RuleStatus = EvaluationStepStatus(ruleStatus)
 	result.LLMStatus = EvaluationStepStatus(llmStatus)
+	return nil
+}
+
+func sqliteLoadEvaluationJobForUpdate(ctx context.Context, tx sqliteTx, jobID string) (EvaluationJob, error) {
+	var job EvaluationJob
+	if err := sqliteScanEvaluationJob(tx.QueryRow(ctx, `
+SELECT id, status, payload, COALESCE(error, ''), created_at, updated_at, started_at, finished_at
+FROM jobs
+WHERE id = $1 AND job_type = $2 FOR UPDATE`, jobID, InitialEvaluationJobType), &job); err != nil {
+		return EvaluationJob{}, sqliteMapDBError(err)
+	}
+	return job, nil
+}
+
+func sqliteScanEvaluationJob(row sqliteScanner, job *EvaluationJob) error {
+	var id, status, message string
+	var payload []byte
+	var startedAt, finishedAt sqliteNullableTime
+	var createdAt, updatedAt time.Time
+	if err := row.Scan(&id, &status, &payload, &message, &createdAt, &updatedAt, &startedAt, &finishedAt); err != nil {
+		return err
+	}
+	decoded, err := buildEvaluationJobFromPayload(id, status, message, payload, createdAt, updatedAt, sqliteNullableTimePtr(startedAt), sqliteNullableTimePtr(finishedAt))
+	if err != nil {
+		return err
+	}
+	*job = decoded
 	return nil
 }
 

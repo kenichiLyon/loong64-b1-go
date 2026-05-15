@@ -97,6 +97,7 @@ func NewHandler(deps Dependencies) http.Handler {
 	if teachingService == nil {
 		teachingService = teaching.NewService(nil, options...)
 	}
+	teachingService.StartEvaluationWorkers()
 	authHandler := newAuthHandler(authService, deps.Config, logger, deps.Config.DevAuthBypass)
 	bootstrapHandler := newBootstrapHandler(teachingService, deps.Config, logger, authService)
 	runtimeConfigHandler := newRuntimeConfigHandler(deps.Config, logger, deps.Config.DevAuthBypass, authService)

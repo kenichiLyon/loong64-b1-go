@@ -31,26 +31,28 @@ func (s *Service) SubmitInitialEvaluationJob(ctx context.Context, actor Actor, s
 		ID:           NewID("evj"),
 		SubmissionID: submissionID,
 		ActorID:      actor.ID,
+		ActorRoles:   actor.RoleValues(),
 		Status:       EvaluationJobQueued,
 		Input:        input,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}
-	s.evaluationJobsMu.Lock()
-	s.evaluationJobs[job.ID] = job
-	s.evaluationJobsMu.Unlock()
-	s.startEvaluationWorkers()
-	select {
-	case s.evaluationQueue <- job.ID:
-	default:
-		s.failEvaluationJob(job.ID, "evaluation queue is full")
-	}
 	audit.Action = "evaluation.initial_enqueue"
 	audit.ActorID = actor.ID
 	audit.TargetType = "submission"
 	audit.TargetID = submissionID
-	_ = audit
-	return cloneEvaluationJob(job), nil
+	audit.Detail = mustJSON(map[string]any{"mode": mode, "force": input.Force, "job_id": job.ID})
+	created, err := s.repo.CreateEvaluationJob(ctx, *job, audit)
+	if err != nil {
+		return EvaluationJob{}, err
+	}
+	s.startEvaluationWorkers()
+	select {
+	case s.evaluationQueue <- created.ID:
+	default:
+		// The polling worker can still claim the persisted job even when the local wake-up channel is saturated.
+	}
+	return cloneEvaluationJob(created), nil
 }
 
 func (s *Service) GetEvaluationJob(ctx context.Context, actor Actor, jobID string) (EvaluationJob, error) {
@@ -58,16 +60,21 @@ func (s *Service) GetEvaluationJob(ctx context.Context, actor Actor, jobID strin
 		return EvaluationJob{}, err
 	}
 	jobID = strings.TrimSpace(jobID)
-	s.evaluationJobsMu.RLock()
-	job, ok := s.evaluationJobs[jobID]
-	s.evaluationJobsMu.RUnlock()
-	if !ok {
-		return EvaluationJob{}, notFoundError("evaluation job not found")
+	job, err := s.repo.GetEvaluationJob(ctx, jobID)
+	if err != nil {
+		return EvaluationJob{}, err
 	}
 	if err := s.requireTeacherSubmissionAccess(ctx, actor, job.SubmissionID); err != nil {
 		return EvaluationJob{}, err
 	}
 	return cloneEvaluationJob(job), nil
+}
+
+func (s *Service) StartEvaluationWorkers() {
+	if s == nil || s.repo == nil {
+		return
+	}
+	s.startEvaluationWorkers()
 }
 
 func (s *Service) startEvaluationWorkers() {
@@ -86,19 +93,45 @@ func (s *Service) startEvaluationWorkers() {
 }
 
 func (s *Service) evaluationWorker() {
-	for jobID := range s.evaluationQueue {
-		s.runEvaluationJob(context.Background(), jobID)
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case jobID := <-s.evaluationQueue:
+			s.runEvaluationJob(context.Background(), jobID)
+			s.drainQueuedEvaluationJobs(context.Background())
+		case <-ticker.C:
+			s.drainQueuedEvaluationJobs(context.Background())
+		}
 	}
 }
 
 func (s *Service) runEvaluationJob(ctx context.Context, jobID string) {
-	job, ok := s.markEvaluationJobRunning(jobID)
-	if !ok {
+	job, err := s.repo.MarkEvaluationJobRunning(ctx, jobID)
+	if err != nil {
 		return
 	}
-	actor, err := NewActor(job.ActorID, []Role{RoleTeacher})
+	s.runClaimedEvaluationJob(ctx, job)
+}
+
+func (s *Service) drainQueuedEvaluationJobs(ctx context.Context) {
+	for {
+		job, err := s.repo.ClaimNextEvaluationJob(ctx)
+		if err != nil {
+			return
+		}
+		s.runClaimedEvaluationJob(ctx, job)
+	}
+}
+
+func (s *Service) runClaimedEvaluationJob(ctx context.Context, job EvaluationJob) {
+	actorRoles := job.ActorRoles
+	if len(actorRoles) == 0 {
+		actorRoles = []Role{RoleTeacher}
+	}
+	actor, err := NewActor(job.ActorID, actorRoles)
 	if err != nil {
-		s.failEvaluationJob(jobID, err.Error())
+		_ = s.repo.FailEvaluationJob(ctx, job.ID, err.Error())
 		return
 	}
 	detail, err := s.CreateInitialEvaluation(ctx, actor, job.SubmissionID, job.Input, AuditEntry{
@@ -108,64 +141,28 @@ func (s *Service) runEvaluationJob(ctx context.Context, jobID string) {
 		TargetID:   job.SubmissionID,
 	})
 	if err != nil {
-		s.failEvaluationJob(jobID, err.Error())
+		_ = s.repo.FailEvaluationJob(ctx, job.ID, err.Error())
 		return
 	}
-	s.completeEvaluationJob(jobID, detail)
+	_ = s.repo.CompleteEvaluationJob(ctx, job.ID, detail)
 }
 
-func (s *Service) markEvaluationJobRunning(jobID string) (EvaluationJob, bool) {
-	now := time.Now().UTC()
-	s.evaluationJobsMu.Lock()
-	defer s.evaluationJobsMu.Unlock()
-	job, ok := s.evaluationJobs[jobID]
-	if !ok || job.Status != EvaluationJobQueued {
-		return EvaluationJob{}, false
-	}
-	job.Status = EvaluationJobRunning
-	job.StartedAt = &now
-	job.UpdatedAt = now
-	return cloneEvaluationJob(job), true
-}
-
-func (s *Service) completeEvaluationJob(jobID string, detail EvaluationResultDetail) {
-	now := time.Now().UTC()
-	s.evaluationJobsMu.Lock()
-	defer s.evaluationJobsMu.Unlock()
-	job, ok := s.evaluationJobs[jobID]
-	if !ok {
-		return
-	}
-	job.Status = EvaluationJobSucceeded
-	job.Result = &detail
-	job.Error = ""
-	job.FinishedAt = &now
-	job.UpdatedAt = now
-}
-
-func (s *Service) failEvaluationJob(jobID string, message string) {
-	now := time.Now().UTC()
-	s.evaluationJobsMu.Lock()
-	defer s.evaluationJobsMu.Unlock()
-	job, ok := s.evaluationJobs[jobID]
-	if !ok {
-		return
-	}
-	job.Status = EvaluationJobFailed
-	job.Error = message
-	job.FinishedAt = &now
-	job.UpdatedAt = now
-}
-
-func cloneEvaluationJob(job *EvaluationJob) EvaluationJob {
-	if job == nil {
-		return EvaluationJob{}
-	}
-	clone := *job
+func cloneEvaluationJob(job EvaluationJob) EvaluationJob {
+	clone := job
 	if job.Result != nil {
-		result := *job.Result
+		result := cloneEvaluationResultDetail(*job.Result)
 		clone.Result = &result
 	}
+	if job.ActorRoles != nil {
+		clone.ActorRoles = append([]Role(nil), job.ActorRoles...)
+	}
+	return clone
+}
+
+func cloneEvaluationResultDetail(detail EvaluationResultDetail) EvaluationResultDetail {
+	clone := detail
+	clone.Findings = append([]RuleCheckFinding(nil), detail.Findings...)
+	clone.Scores = append([]MetricScore(nil), detail.Scores...)
 	return clone
 }
 

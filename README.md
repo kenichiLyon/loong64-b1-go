@@ -176,7 +176,8 @@ GOOS=linux GOARCH=loong64 CGO_ENABLED=0 go build ./cmd/upgrade
 - 学生提交：`POST /api/v1/student/experiments/{experimentID}/submissions`
 - 上传附件：`POST /api/v1/student/submissions/{submissionID}/artifacts`
 - 登记 Git 链接：`POST /api/v1/student/submissions/{submissionID}/artifact-links`
-- 触发初评：`POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`
+- 触发初评任务：`POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial`
+- 轮询初评任务：`GET /api/v1/teacher/evaluations/jobs/{jobID}`
 - 教师复核：`PUT /api/v1/teacher/submissions/{submissionID}/review`
 - 发布结果：`POST /api/v1/teacher/submissions/{submissionID}/review/publish`
 - 学生查看已发布评价：`GET /api/v1/student/submissions/{submissionID}/review`
