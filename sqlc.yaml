@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema:
+      - "internal/authn/authnpg/schema.sql"
+    queries:
+      - "internal/authn/authnpg/queries.sql"
+    gen:
+      go:
+        package: "authnpg"
+        out: "internal/authn/authnpg"
+        sql_package: "pgx/v5"
+        emit_empty_slices: true

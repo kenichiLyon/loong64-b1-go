@@ -8,6 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/kenichiLyon/loong64-b1-go/internal/authn/authnpg"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
 	"github.com/kenichiLyon/loong64-b1-go/internal/teaching"
 )
@@ -21,9 +23,7 @@ func NewPostgresRepository(db *database.Pool) *PostgresRepository {
 }
 
 type pgxPool interface {
-	Query(context.Context, string, ...any) (pgx.Rows, error)
-	QueryRow(context.Context, string, ...any) pgx.Row
-	Exec(context.Context, string, ...any) (pgconn.CommandTag, error)
+	authnpg.DBTX
 }
 
 func (r *PostgresRepository) pool() (pgxPool, error) {
@@ -38,7 +38,17 @@ func (r *PostgresRepository) GetUserAuthByUsername(ctx context.Context, username
 	if err != nil {
 		return UserAuth{}, err
 	}
-	return loadUserAuth(ctx, pool, `SELECT id, username, display_name, status, COALESCE(password_hash, '') AS password_hash FROM users WHERE lower(username)=lower($1)`, username)
+	row, err := authnpg.New(pool).GetUserAuthByUsername(ctx, username)
+	if err != nil {
+		return UserAuth{}, mapDBError(err)
+	}
+	return loadUserAuthRoles(ctx, authnpg.New(pool), UserAuth{
+		ID:           row.ID,
+		Username:     row.Username,
+		DisplayName:  row.DisplayName,
+		Status:       row.Status,
+		PasswordHash: row.PasswordHash,
+	})
 }
 
 func (r *PostgresRepository) GetUserAuthByID(ctx context.Context, id string) (UserAuth, error) {
@@ -46,28 +56,26 @@ func (r *PostgresRepository) GetUserAuthByID(ctx context.Context, id string) (Us
 	if err != nil {
 		return UserAuth{}, err
 	}
-	return loadUserAuth(ctx, pool, `SELECT id, username, display_name, status, COALESCE(password_hash, '') AS password_hash FROM users WHERE id=$1`, id)
-}
-
-func loadUserAuth(ctx context.Context, pool pgxPool, query string, arg string) (UserAuth, error) {
-	var user UserAuth
-	if err := pool.QueryRow(ctx, query, arg).Scan(&user.ID, &user.Username, &user.DisplayName, &user.Status, &user.PasswordHash); err != nil {
-		return UserAuth{}, mapDBError(err)
-	}
-	rows, err := pool.Query(ctx, `SELECT role FROM user_roles WHERE user_id = $1 ORDER BY role`, user.ID)
+	row, err := authnpg.New(pool).GetUserAuthByID(ctx, id)
 	if err != nil {
 		return UserAuth{}, mapDBError(err)
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var role string
-		if err := rows.Scan(&role); err != nil {
-			return UserAuth{}, mapDBError(err)
-		}
-		user.Roles = append(user.Roles, teaching.Role(role))
-	}
-	if err := rows.Err(); err != nil {
+	return loadUserAuthRoles(ctx, authnpg.New(pool), UserAuth{
+		ID:           row.ID,
+		Username:     row.Username,
+		DisplayName:  row.DisplayName,
+		Status:       row.Status,
+		PasswordHash: row.PasswordHash,
+	})
+}
+
+func loadUserAuthRoles(ctx context.Context, queries *authnpg.Queries, user UserAuth) (UserAuth, error) {
+	roles, err := queries.ListUserRoles(ctx, user.ID)
+	if err != nil {
 		return UserAuth{}, mapDBError(err)
+	}
+	for _, role := range roles {
+		user.Roles = append(user.Roles, teaching.Role(role))
 	}
 	return user, nil
 }
@@ -77,13 +85,17 @@ func (r *PostgresRepository) CreateSession(ctx context.Context, session Session)
 	if err != nil {
 		return Session{}, err
 	}
-	if err := pool.QueryRow(ctx, `
-INSERT INTO auth_sessions (id, user_id, token_hash, expires_at, last_seen_at)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, user_id, token_hash, expires_at, created_at, last_seen_at`,
-		session.ID, session.UserID, session.TokenHash, session.ExpiresAt, session.LastSeenAt).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.CreatedAt, &session.LastSeenAt); err != nil {
+	created, err := authnpg.New(pool).CreateSession(ctx, authnpg.CreateSessionParams{
+		ID:         session.ID,
+		UserID:     session.UserID,
+		TokenHash:  session.TokenHash,
+		ExpiresAt:  pgTimestamptz(session.ExpiresAt),
+		LastSeenAt: pgTimestamptz(session.LastSeenAt),
+	})
+	if err != nil {
 		return Session{}, mapDBError(err)
 	}
+	session = sessionFromPG(created)
 	session.User, err = r.GetUserAuthByID(ctx, session.UserID)
 	if err != nil {
 		return Session{}, err
@@ -96,13 +108,11 @@ func (r *PostgresRepository) GetSessionByTokenHash(ctx context.Context, tokenHas
 	if err != nil {
 		return Session{}, err
 	}
-	var session Session
-	if err := pool.QueryRow(ctx, `
-SELECT id, user_id, token_hash, expires_at, created_at, last_seen_at
-FROM auth_sessions
-WHERE token_hash = $1`, tokenHash).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.CreatedAt, &session.LastSeenAt); err != nil {
+	row, err := authnpg.New(pool).GetSessionByTokenHash(ctx, tokenHash)
+	if err != nil {
 		return Session{}, mapDBError(err)
 	}
+	session := sessionFromPG(row)
 	session.User, err = r.GetUserAuthByID(ctx, session.UserID)
 	if err != nil {
 		return Session{}, err
@@ -115,14 +125,15 @@ func (r *PostgresRepository) TouchSession(ctx context.Context, session Session) 
 	if err != nil {
 		return Session{}, err
 	}
-	if err := pool.QueryRow(ctx, `
-UPDATE auth_sessions
-SET last_seen_at = $2, expires_at = $3
-WHERE id = $1
-RETURNING id, user_id, token_hash, expires_at, created_at, last_seen_at`,
-		session.ID, session.LastSeenAt, session.ExpiresAt).Scan(&session.ID, &session.UserID, &session.TokenHash, &session.ExpiresAt, &session.CreatedAt, &session.LastSeenAt); err != nil {
+	row, err := authnpg.New(pool).TouchSession(ctx, authnpg.TouchSessionParams{
+		ID:         session.ID,
+		LastSeenAt: pgTimestamptz(session.LastSeenAt),
+		ExpiresAt:  pgTimestamptz(session.ExpiresAt),
+	})
+	if err != nil {
 		return Session{}, mapDBError(err)
 	}
+	session = sessionFromPG(row)
 	session.User, err = r.GetUserAuthByID(ctx, session.UserID)
 	if err != nil {
 		return Session{}, err
@@ -135,7 +146,7 @@ func (r *PostgresRepository) DeleteSessionByTokenHash(ctx context.Context, token
 	if err != nil {
 		return err
 	}
-	if _, err := pool.Exec(ctx, `DELETE FROM auth_sessions WHERE token_hash = $1`, tokenHash); err != nil {
+	if err := authnpg.New(pool).DeleteSessionByTokenHash(ctx, tokenHash); err != nil {
 		return mapDBError(err)
 	}
 	return nil
@@ -150,14 +161,15 @@ func (r *PostgresRepository) RotatePassword(ctx context.Context, userID string, 
 		return err
 	}
 	defer rollbackAuthTx(ctx, tx)
-	tag, err := tx.Exec(ctx, `UPDATE users SET password_hash = $2, updated_at = now() WHERE id = $1`, userID, passwordHash)
+	queries := authnpg.New(tx)
+	rowsAffected, err := queries.RotateUserPassword(ctx, authnpg.RotateUserPasswordParams{ID: userID, PasswordHash: passwordHash})
 	if err != nil {
 		return mapDBError(err)
 	}
-	if tag.RowsAffected() == 0 {
+	if rowsAffected == 0 {
 		return notFoundError("auth resource not found")
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM auth_sessions WHERE user_id = $1`, userID); err != nil {
+	if err := queries.DeleteSessionsByUserID(ctx, userID); err != nil {
 		return mapDBError(err)
 	}
 	return tx.Commit(ctx)
@@ -168,16 +180,31 @@ func (r *PostgresRepository) DeleteExpiredSessions(ctx context.Context, before t
 	if err != nil {
 		return 0, err
 	}
-	tag, err := pool.Exec(ctx, `DELETE FROM auth_sessions WHERE expires_at <= $1`, before)
+	rowsAffected, err := authnpg.New(pool).DeleteExpiredSessions(ctx, pgTimestamptz(before))
 	if err != nil {
 		return 0, mapDBError(err)
 	}
-	return tag.RowsAffected(), nil
+	return rowsAffected, nil
 }
 
 func rollbackAuthTx(ctx context.Context, tx pgx.Tx) {
 	if tx != nil {
 		_ = tx.Rollback(ctx)
+	}
+}
+
+func pgTimestamptz(value time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: value, Valid: true}
+}
+
+func sessionFromPG(row authnpg.AuthSession) Session {
+	return Session{
+		ID:         row.ID,
+		UserID:     row.UserID,
+		TokenHash:  row.TokenHash,
+		ExpiresAt:  row.ExpiresAt.Time,
+		CreatedAt:  row.CreatedAt.Time,
+		LastSeenAt: row.LastSeenAt.Time,
 	}
 }
 
