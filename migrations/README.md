@@ -1,17 +1,17 @@
 # 数据库迁移
 
-PostgreSQL 迁移脚本放在本目录，并由 `cmd/migrate` 按文件名前缀顺序执行。
+PostgreSQL 迁移脚本放在本目录，并由 `cmd/upgrade` 按文件名前缀顺序执行。
 
 ## 运行
 
 ```bash
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/migrate up
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable go run ./cmd/upgrade up
 ```
 
 Windows PowerShell：
 
 ```powershell
-$env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable'; go run ./cmd/migrate up
+$env:DATABASE_URL='postgres://postgres:postgres@127.0.0.1:5432/loong64_b1?sslmode=disable'; go run ./cmd/upgrade up
 ```
 
 ## 命名

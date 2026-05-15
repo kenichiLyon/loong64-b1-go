@@ -7,5 +7,5 @@ if (-not $env:STORAGE_ROOT) {
     $env:STORAGE_ROOT = './storage'
 }
 
-go run ./cmd/migrate up
+go run ./cmd/upgrade up
 go run ./cmd/server

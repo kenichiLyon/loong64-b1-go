@@ -31,8 +31,8 @@ ENV HTTP_ADDR=0.0.0.0:8080 \
     APP_ENV=production \
     STORAGE_ROOT=/var/lib/loong64-b1-go/storage \
     RUNTIME_CONFIG_PATH=/var/lib/loong64-b1-go/config/runtime.json \
-    MIGRATIONS_DIR=/migrations \
+    UPGRADE_DIR=/migrations \
     DB_DRIVER=sqlite \
     SQLITE_PATH=/var/lib/loong64-b1-go/data/loong64-b1-go.db \
-    AUTO_MIGRATE=true
+    AUTO_UPGRADE=true
 ENTRYPOINT ["/loong64-b1-go"]

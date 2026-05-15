@@ -12,7 +12,7 @@ services:
       APP_ENV: production
       DB_DRIVER: sqlite
       SQLITE_PATH: /var/lib/loong64-b1-go/data/loong64-b1-go.db
-      AUTO_MIGRATE: "true"
+      AUTO_UPGRADE: "true"
       STORAGE_ROOT: /var/lib/loong64-b1-go/storage
       RUNTIME_CONFIG_PATH: /var/lib/loong64-b1-go/config/runtime.json
     volumes:
@@ -52,7 +52,7 @@ services:
       APP_ENV: production
       DB_DRIVER: postgres
       DATABASE_URL: postgres://loong64_b1:loong64_b1_dev@postgres:5432/loong64_b1?sslmode=disable
-      AUTO_MIGRATE: "true"
+      AUTO_UPGRADE: "true"
       STORAGE_ROOT: /var/lib/loong64-b1-go/storage
       RUNTIME_CONFIG_PATH: /var/lib/loong64-b1-go/config/runtime.json
     volumes:

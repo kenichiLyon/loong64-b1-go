@@ -11,12 +11,12 @@ import (
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/config"
 	"github.com/kenichiLyon/loong64-b1-go/internal/database"
-	"github.com/kenichiLyon/loong64-b1-go/internal/migrate"
+	"github.com/kenichiLyon/loong64-b1-go/internal/upgrade"
 )
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] != "up" {
-		fmt.Fprintln(os.Stderr, "usage: migrate [up]")
+		fmt.Fprintln(os.Stderr, "usage: upgrade [up]")
 		os.Exit(2)
 	}
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -41,14 +41,14 @@ func main() {
 	}
 	defer pool.Close()
 
-	runner := migrate.NewRunner(pool, cfg.MigrationsDir)
+	runner := upgrade.NewRunner(pool, cfg.UpgradeDir)
 	applied, err := runner.Up(ctx)
 	if err != nil {
-		logger.Error("migration failed", "error", err)
+		logger.Error("system upgrade failed", "error", err)
 		os.Exit(1)
 	}
-	logger.Info("migration completed", "applied", len(applied), "time", time.Now().UTC().Format(time.RFC3339))
-	for _, migration := range applied {
-		logger.Info("applied migration", "version", migration.Version, "name", migration.Name)
+	logger.Info("system upgrade completed", "applied", len(applied), "time", time.Now().UTC().Format(time.RFC3339))
+	for _, step := range applied {
+		logger.Info("applied upgrade step", "scope", step.Scope, "version", step.Version, "name", step.Name)
 	}
 }

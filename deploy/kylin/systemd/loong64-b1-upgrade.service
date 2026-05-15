@@ -1,5 +1,5 @@
 [Unit]
-Description=loong64-b1-go PostgreSQL migration
+Description=loong64-b1-go system upgrade
 Documentation=https://github.com/kenichiLyon/loong64-b1-go
 After=network-online.target postgresql.service
 Wants=network-online.target
@@ -10,7 +10,7 @@ User=loong64b1
 Group=loong64b1
 WorkingDirectory=/opt/loong64-b1-go
 EnvironmentFile=/etc/loong64-b1-go/loong64-b1-go.env
-ExecStart=/opt/loong64-b1-go/bin/loong64-b1-migrate-linux-loong64 up
+ExecStart=/opt/loong64-b1-go/bin/loong64-b1-upgrade-linux-loong64 up
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
