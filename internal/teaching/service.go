@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -198,6 +199,11 @@ type Service struct {
 	maxUploadBytes            int64
 	maxArtifactsPerSubmission int
 	llmClient                 LLMCompleter
+	evaluationJobsMu          sync.RWMutex
+	evaluationJobs            map[string]*EvaluationJob
+	evaluationQueue           chan string
+	evaluationWorkerOnce      sync.Once
+	evaluationWorkerLimit     int
 }
 
 type ArtifactStore interface {
@@ -245,8 +251,23 @@ func WithLLMClient(client LLMCompleter) ServiceOption {
 	}
 }
 
+func WithEvaluationWorkerLimit(limit int) ServiceOption {
+	return func(s *Service) {
+		if limit > 0 {
+			s.evaluationWorkerLimit = limit
+		}
+	}
+}
+
 func NewService(repo Repository, options ...ServiceOption) *Service {
-	service := &Service{repo: repo, maxUploadBytes: DefaultMaxUploadBytes, maxArtifactsPerSubmission: DefaultMaxArtifactsPerSubmission}
+	service := &Service{
+		repo:                      repo,
+		maxUploadBytes:            DefaultMaxUploadBytes,
+		maxArtifactsPerSubmission: DefaultMaxArtifactsPerSubmission,
+		evaluationJobs:            map[string]*EvaluationJob{},
+		evaluationQueue:           make(chan string, 128),
+		evaluationWorkerLimit:     2,
+	}
 	for _, option := range options {
 		option(service)
 	}

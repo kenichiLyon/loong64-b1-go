@@ -158,6 +158,23 @@ export interface EvaluationResultDetail {
   scores: MetricScore[];
 }
 
+export interface EvaluationJob {
+  id: string;
+  submission_id: string;
+  actor_id: string;
+  status: 'queued' | 'running' | 'succeeded' | 'failed';
+  input: {
+    mode?: 'rule_only' | 'rule_and_llm';
+    force?: boolean;
+  };
+  result?: EvaluationResultDetail;
+  error?: string;
+  created_at: string;
+  started_at?: string;
+  finished_at?: string;
+  updated_at: string;
+}
+
 export interface TeacherMetricScore {
   id: string;
   metric_id: string;

@@ -61,6 +61,7 @@ func RegisterRoutes(mux *http.ServeMux, deps HTTPDependencies) {
 	mux.HandleFunc("GET /api/v1/teacher/experiments/{experimentID}/submissions", h.listExperimentSubmissions)
 	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}", h.getSubmissionDetail)
 	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/evaluations/initial", h.createInitialEvaluation)
+	mux.HandleFunc("GET /api/v1/teacher/evaluations/jobs/{jobID}", h.getEvaluationJob)
 	mux.HandleFunc("GET /api/v1/teacher/submissions/{submissionID}/evaluations/latest", h.getLatestEvaluation)
 	mux.HandleFunc("PUT /api/v1/teacher/submissions/{submissionID}/review", h.upsertTeacherReview)
 	mux.HandleFunc("POST /api/v1/teacher/submissions/{submissionID}/review/publish", h.publishTeacherReview)
@@ -555,12 +556,26 @@ func (h *HTTPHandler) createInitialEvaluation(w http.ResponseWriter, r *http.Req
 			return
 		}
 	}
-	detail, err := h.service.CreateInitialEvaluation(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
+	job, err := h.service.SubmitInitialEvaluationJob(r.Context(), actor, r.PathValue("submissionID"), input, h.audit(r))
 	if err != nil {
 		h.writeError(w, err)
 		return
 	}
-	httpx.WriteJSON(w, http.StatusCreated, detail)
+	httpx.WriteJSON(w, http.StatusAccepted, job)
+}
+
+func (h *HTTPHandler) getEvaluationJob(w http.ResponseWriter, r *http.Request) {
+	actor, err := h.currentActor(r)
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	job, err := h.service.GetEvaluationJob(r.Context(), actor, r.PathValue("jobID"))
+	if err != nil {
+		h.writeError(w, err)
+		return
+	}
+	httpx.WriteJSON(w, http.StatusOK, job)
 }
 
 func (h *HTTPHandler) getLatestEvaluation(w http.ResponseWriter, r *http.Request) {

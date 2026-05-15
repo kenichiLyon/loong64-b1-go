@@ -7,10 +7,167 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/kenichiLyon/loong64-b1-go/internal/aigateway"
 	"github.com/kenichiLyon/loong64-b1-go/internal/llm"
 )
+
+func (s *Service) SubmitInitialEvaluationJob(ctx context.Context, actor Actor, submissionID string, input CreateInitialEvaluationInput, audit AuditEntry) (EvaluationJob, error) {
+	if err := s.ready(); err != nil {
+		return EvaluationJob{}, err
+	}
+	submissionID = strings.TrimSpace(submissionID)
+	if err := s.requireTeacherSubmissionAccess(ctx, actor, submissionID); err != nil {
+		return EvaluationJob{}, err
+	}
+	mode := normalizeEvaluationMode(input.Mode)
+	if mode != RuleOnlyMode && mode != RuleAndLLMMode {
+		return EvaluationJob{}, validationError("invalid evaluation mode")
+	}
+	input.Mode = mode
+	now := time.Now().UTC()
+	job := &EvaluationJob{
+		ID:           NewID("evj"),
+		SubmissionID: submissionID,
+		ActorID:      actor.ID,
+		Status:       EvaluationJobQueued,
+		Input:        input,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	s.evaluationJobsMu.Lock()
+	s.evaluationJobs[job.ID] = job
+	s.evaluationJobsMu.Unlock()
+	s.startEvaluationWorkers()
+	select {
+	case s.evaluationQueue <- job.ID:
+	default:
+		s.failEvaluationJob(job.ID, "evaluation queue is full")
+	}
+	audit.Action = "evaluation.initial_enqueue"
+	audit.ActorID = actor.ID
+	audit.TargetType = "submission"
+	audit.TargetID = submissionID
+	_ = audit
+	return cloneEvaluationJob(job), nil
+}
+
+func (s *Service) GetEvaluationJob(ctx context.Context, actor Actor, jobID string) (EvaluationJob, error) {
+	if err := s.ready(); err != nil {
+		return EvaluationJob{}, err
+	}
+	jobID = strings.TrimSpace(jobID)
+	s.evaluationJobsMu.RLock()
+	job, ok := s.evaluationJobs[jobID]
+	s.evaluationJobsMu.RUnlock()
+	if !ok {
+		return EvaluationJob{}, notFoundError("evaluation job not found")
+	}
+	if err := s.requireTeacherSubmissionAccess(ctx, actor, job.SubmissionID); err != nil {
+		return EvaluationJob{}, err
+	}
+	return cloneEvaluationJob(job), nil
+}
+
+func (s *Service) startEvaluationWorkers() {
+	if s == nil {
+		return
+	}
+	s.evaluationWorkerOnce.Do(func() {
+		limit := s.evaluationWorkerLimit
+		if limit <= 0 {
+			limit = 1
+		}
+		for i := 0; i < limit; i++ {
+			go s.evaluationWorker()
+		}
+	})
+}
+
+func (s *Service) evaluationWorker() {
+	for jobID := range s.evaluationQueue {
+		s.runEvaluationJob(context.Background(), jobID)
+	}
+}
+
+func (s *Service) runEvaluationJob(ctx context.Context, jobID string) {
+	job, ok := s.markEvaluationJobRunning(jobID)
+	if !ok {
+		return
+	}
+	actor, err := NewActor(job.ActorID, []Role{RoleTeacher})
+	if err != nil {
+		s.failEvaluationJob(jobID, err.Error())
+		return
+	}
+	detail, err := s.CreateInitialEvaluation(ctx, actor, job.SubmissionID, job.Input, AuditEntry{
+		Action:     "evaluation.initial_create",
+		ActorID:    job.ActorID,
+		TargetType: "submission",
+		TargetID:   job.SubmissionID,
+	})
+	if err != nil {
+		s.failEvaluationJob(jobID, err.Error())
+		return
+	}
+	s.completeEvaluationJob(jobID, detail)
+}
+
+func (s *Service) markEvaluationJobRunning(jobID string) (EvaluationJob, bool) {
+	now := time.Now().UTC()
+	s.evaluationJobsMu.Lock()
+	defer s.evaluationJobsMu.Unlock()
+	job, ok := s.evaluationJobs[jobID]
+	if !ok || job.Status != EvaluationJobQueued {
+		return EvaluationJob{}, false
+	}
+	job.Status = EvaluationJobRunning
+	job.StartedAt = &now
+	job.UpdatedAt = now
+	return cloneEvaluationJob(job), true
+}
+
+func (s *Service) completeEvaluationJob(jobID string, detail EvaluationResultDetail) {
+	now := time.Now().UTC()
+	s.evaluationJobsMu.Lock()
+	defer s.evaluationJobsMu.Unlock()
+	job, ok := s.evaluationJobs[jobID]
+	if !ok {
+		return
+	}
+	job.Status = EvaluationJobSucceeded
+	job.Result = &detail
+	job.Error = ""
+	job.FinishedAt = &now
+	job.UpdatedAt = now
+}
+
+func (s *Service) failEvaluationJob(jobID string, message string) {
+	now := time.Now().UTC()
+	s.evaluationJobsMu.Lock()
+	defer s.evaluationJobsMu.Unlock()
+	job, ok := s.evaluationJobs[jobID]
+	if !ok {
+		return
+	}
+	job.Status = EvaluationJobFailed
+	job.Error = message
+	job.FinishedAt = &now
+	job.UpdatedAt = now
+}
+
+func cloneEvaluationJob(job *EvaluationJob) EvaluationJob {
+	if job == nil {
+		return EvaluationJob{}
+	}
+	clone := *job
+	if job.Result != nil {
+		result := *job.Result
+		clone.Result = &result
+	}
+	return clone
+}
 
 func (s *Service) CreateInitialEvaluation(ctx context.Context, actor Actor, submissionID string, input CreateInitialEvaluationInput, audit AuditEntry) (EvaluationResultDetail, error) {
 	if err := s.ready(); err != nil {
